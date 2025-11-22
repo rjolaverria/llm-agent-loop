@@ -75,6 +75,10 @@ Runs the agent loop.
 - `reason`: `'stop_condition' | 'max_loops'` - Why the loop stopped.
 - `iterations`: `number` - Number of iterations performed.
 
+## Development Tasks
+
+You can track the development progress and completed tasks in [TASKS.md](./TASKS.md).
+
 ---
 
 *This project was created with [Google Antigravity](https://antigravity.google/).*
