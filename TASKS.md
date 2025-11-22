@@ -1,0 +1,55 @@
+# Task List
+
+- [x] Initialize Project
+    - [x] Initialize npm project (`npm init -y`)
+    - [x] Set up TypeScript (`tsc --init`)
+    - [x] Configure `package.json` (scripts, main, types)
+    - [x] Set up testing framework (Vitest)
+- [x] Implement Agent Loop
+    - [x] Define interfaces (LLM Caller, Stop Condition, Options)
+    - [x] Implement the main loop function
+    - [x] Handle max loops
+    - [x] Handle stop condition
+- [x] Verify Implementation
+    - [x] Create unit tests for the loop
+    - [x] Test max loops limit
+    - [x] Test stop condition
+    - [x] Test error handling
+- [x] Add OpenAI Simulation Test
+    - [x] Install OpenAI SDK (dev dependency)
+    - [x] Create `src/openai_simulation.test.ts`
+    - [x] Implement mock OpenAI caller
+    - [x] Verify with `npm test`
+- [x] Add OpenAI Tools Simulation Test
+    - [x] Update `src/openai_simulation.test.ts` with tool call test
+    - [x] Verify with `npm test`
+- [x] Add Gemini Simulation Test
+    - [x] Install Google Generative AI SDK (dev dependency)
+    - [x] Create `src/gemini_simulation.test.ts`
+    - [x] Implement mock Gemini caller
+    - [x] Add tool call simulation
+    - [x] Verify with `npm test`
+- [x] Add Claude Simulation Test
+    - [x] Install Anthropic SDK (dev dependency)
+    - [x] Create `src/claude_simulation.test.ts`
+    - [x] Implement mock Claude caller
+    - [x] Add tool call simulation
+    - [x] Verify with `npm test`
+- [x] Initialize Git
+    - [x] Create .gitignore
+    - [x] git init
+    - [x] git add .
+    - [x] git commit
+- [x] Prepare for NPM Publish
+    - [x] Create README.md
+    - [x] Update package.json (files, exports, description)
+    - [x] Check npm login status
+- [x] Push to GitHub
+    - [x] Check gh CLI status
+    - [x] Create GitHub repository
+    - [x] Push code
+- [x] Publish to npm
+- [x] Setup CI/CD
+    - [x] Create .github/workflows/publish.yml
+    - [x] Configure workflow for npm publish (on release)
+    - [x] Commit and push changes
