@@ -1,10 +1,19 @@
 {
   "name": "llm-agent-loop",
   "version": "1.0.0",
-  "description": "",
+  "description": "A lightweight, provider-agnostic agent loop for building LLM agents.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest",
