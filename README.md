@@ -36,7 +36,7 @@ const result = await agentLoop<string, MyContext>({
   },
 
   // Condition to stop the loop
-  stopCondition: (response) => {
+  stopCondition: (response, context) => {
     return response.includes("DONE");
   },
 
@@ -77,7 +77,7 @@ Runs the agent loop.
 
 ## Development Tasks
 
-You can track the development progress and completed tasks in [TASKS.md](./TASKS.md). These tasks are executed by the **LLM Antigravity Agent**.
+You can track the development progress and completed tasks in [TASKS.md](./TASKS.md). These tasks are executed by the **Antigravity Agent**.
 
 ---
 
