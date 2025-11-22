@@ -74,3 +74,7 @@ Runs the agent loop.
 - `lastResponse`: `TResponse | undefined` - The last response from the LLM.
 - `reason`: `'stop_condition' | 'max_loops'` - Why the loop stopped.
 - `iterations`: `number` - Number of iterations performed.
+
+---
+
+*This project was created with [Google Antigravity](https://antigravity.google/).*
