@@ -1,6 +1,6 @@
 {
   "name": "llm-agent-loop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A lightweight, provider-agnostic agent loop for building LLM agents.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,6 +22,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rjolaverria/llm-agent-loop.git"
+  },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.70.1",
     "@google/generative-ai": "^0.24.1",
