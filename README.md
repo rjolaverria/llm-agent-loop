@@ -77,7 +77,7 @@ Runs the agent loop.
 
 ## Development Tasks
 
-You can track the development progress and completed tasks in [TASKS.md](./TASKS.md).
+You can track the development progress and completed tasks in [TASKS.md](./TASKS.md). These tasks are executed by the **LLM Antigravity Agent**.
 
 ---
 
