@@ -53,3 +53,5 @@
     - [x] Create .github/workflows/publish.yml
     - [x] Configure workflow for npm publish (on release)
     - [x] Commit and push changes
+- [x] Add Documentation
+    - [x] Create CONTRIBUTING.md (LLM-only policy)
