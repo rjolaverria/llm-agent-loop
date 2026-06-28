@@ -7,7 +7,7 @@ consumers of the published npm package interact with — and the **developer exp
 (DevX)** — meaning what it's like to clone, build, test, and contribute to this repo.
 
 The package is intentionally tiny and well-scoped: a single generic `agentLoop` function
-(`src/index.ts`, 105 lines) plus unit tests and mocked OpenAI / Gemini / Claude simulation
+(`src/index.ts`, ~100 lines) plus unit tests and mocked OpenAI / Gemini / Claude simulation
 tests. The build is clean and all 10 tests pass. The findings below are about closing the
 gap between "a correct loop primitive" and "a primitive that's pleasant to adopt and
 maintain."
@@ -122,9 +122,9 @@ Also document the stop/context ordering from 1.4.
 `package.json:19` defines `"test": "vitest"`. Bare `vitest` starts the **interactive watch
 runner**, which never exits. Consequences:
 - A contributor running `npm test` locally gets a hung process, not a pass/fail result.
-- CI (`.github/workflows/test.yml:22` and `publish.yml:26`) only works because Vitest
-  auto-detects `CI=true` and switches to run-once mode. That's an implicit dependency on an
-  environment variable — brittle and surprising.
+- CI (`.github/workflows/test.yml:22` and `.github/workflows/publish.yml:26`) only works
+  because Vitest auto-detects `CI=true` and switches to run-once mode. That's an implicit
+  dependency on an environment variable — brittle and surprising.
 
 **Recommendation:** split the scripts:
 ```jsonc
