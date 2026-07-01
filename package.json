@@ -22,7 +22,7 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [],
-  "author": "",
+  "author": "Rafi Olaverria",
   "license": "ISC",
   "repository": {
     "type": "git",
