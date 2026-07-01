@@ -16,7 +16,9 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
     "prepublishOnly": "npm run build"
   },
   "keywords": [],
@@ -29,8 +31,9 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.70.1",
     "@google/generative-ai": "^0.24.1",
+    "@vitest/coverage-v8": "^4.1.9",
     "openai": "^6.9.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.13"
+    "vitest": "^4.1.9"
   }
 }
