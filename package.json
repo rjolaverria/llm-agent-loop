@@ -21,7 +21,17 @@
     "coverage": "vitest run --coverage",
     "prepublishOnly": "npm run build"
   },
-  "keywords": [],
+  "keywords": [
+    "llm",
+    "agent",
+    "agent-loop",
+    "ai",
+    "openai",
+    "anthropic",
+    "gemini",
+    "tool-use",
+    "typescript"
+  ],
   "author": "Rafi Olaverria",
   "license": "ISC",
   "repository": {
