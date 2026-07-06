@@ -70,10 +70,26 @@ Runs the agent loop.
 
 #### Returns
 
-- `finalContext`: `TContext` - The context after the loop finishes.
+- `finalContext`: `TContext` - The context after the loop finishes. See the note below about the final response.
 - `lastResponse`: `TResponse | undefined` - The last response from the LLM.
 - `reason`: `'stop_condition' | 'max_loops'` - Why the loop stopped.
 - `iterations`: `number` - Number of iterations performed.
+
+#### Note: the final response is not folded into `finalContext` on stop
+
+The loop runs in this order each iteration: call `llmCaller` → check `stopCondition` → (if not stopping) run `updateContext`. When `stopCondition` returns `true`, the loop returns **before** `updateContext` runs, so the response that triggered the stop is **not** merged into `finalContext`.
+
+That final response is always available as `result.lastResponse`. If you use `finalContext` as your complete message history/transcript, append `lastResponse` yourself when `reason` is `'stop_condition'`:
+
+```typescript
+const result = await agentLoop<string, MyContext>({ /* ... */ });
+
+// finalContext.messages does NOT include the response that stopped the loop.
+const fullMessages =
+  result.reason === 'stop_condition' && result.lastResponse !== undefined
+    ? [...result.finalContext.messages, { role: 'assistant', content: result.lastResponse }]
+    : result.finalContext.messages;
+```
 
 ## Development Tasks
 

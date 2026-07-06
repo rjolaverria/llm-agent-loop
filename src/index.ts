@@ -40,12 +40,21 @@ export interface AgentLoopOptions<TResponse, TContext> {
 export interface AgentLoopResult<TResponse, TContext> {
   /**
    * The final context after the loop finished.
+   *
+   * Note: when the loop stops because `stopCondition` returned `true`,
+   * `updateContext` is NOT called for that final iteration. This means the
+   * response that triggered the stop is not folded into `finalContext` — use
+   * `lastResponse` to access it. If you rely on `finalContext` as the complete
+   * transcript, remember to append `lastResponse` yourself.
    */
   finalContext: TContext;
 
   /**
    * The last response received from the LLM.
    * undefined if the loop didn't run (e.g. maxLoops=0).
+   *
+   * When `reason` is `'stop_condition'`, this holds the response that triggered
+   * the stop, which is intentionally not reflected in `finalContext`.
    */
   lastResponse: TResponse | undefined;
 
