@@ -54,6 +54,13 @@ console.log(result.reason); // 'stop_condition' or 'max_loops'
 console.log(result.lastResponse);
 ```
 
+### Real-provider example
+
+The snippet above uses a stubbed `llmCaller`. For an end-to-end example against a
+real provider — a Claude tool-calling loop that executes tools and feeds the
+results back — see [`examples/anthropic-tool-call.ts`](./examples/anthropic-tool-call.ts)
+and the [examples README](./examples/README.md).
+
 ## API
 
 ### `agentLoop(options)`
