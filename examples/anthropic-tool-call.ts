@@ -7,10 +7,15 @@
  *   2. Executes any tool calls Claude requests and feeds the results back.
  *   3. Loops until Claude produces a final text answer (stop_reason 'end_turn').
  *
- * Run it:
- *   npm install llm-agent-loop @anthropic-ai/sdk
+ * Run it from a clone of this repo (the `llm-agent-loop` import resolves to the
+ * built `dist/`, so a build step is required):
+ *   npm install
+ *   npm run build
  *   export ANTHROPIC_API_KEY=sk-ant-...
  *   npx tsx examples/anthropic-tool-call.ts
+ *
+ * In your own project, install the published package instead:
+ *   npm install llm-agent-loop @anthropic-ai/sdk
  */
 import { agentLoop } from 'llm-agent-loop';
 import Anthropic from '@anthropic-ai/sdk';
@@ -34,12 +39,19 @@ const tools: Anthropic.Tool[] = [
 ];
 
 // Our own tool implementations. In a real app these would hit an API/DB.
-function runTool(name: string, input: Record<string, unknown>): string {
+// The model controls tool inputs, so validate them rather than trusting the shape.
+function runTool(name: string, input: unknown): string {
+  const args = (input ?? {}) as Record<string, unknown>;
   switch (name) {
-    case 'get_weather':
-      return `The weather in ${String(input.location)} is sunny and 72°F.`;
+    case 'get_weather': {
+      const location = args.location;
+      if (typeof location !== 'string' || location.trim() === '') {
+        return 'Error: get_weather requires a non-empty "location" string.';
+      }
+      return `The weather in ${location} is sunny and 72°F.`;
+    }
     default:
-      return `Unknown tool: ${name}`;
+      return `Error: unknown tool "${name}".`;
   }
 }
 
@@ -83,7 +95,7 @@ async function main() {
         const toolResults: Anthropic.ToolResultBlockParam[] = toolUses.map((block) => ({
           type: 'tool_result',
           tool_use_id: block.id,
-          content: runTool(block.name, block.input as Record<string, unknown>),
+          content: runTool(block.name, block.input),
         }));
         messages.push({ role: 'user', content: toolResults });
       }

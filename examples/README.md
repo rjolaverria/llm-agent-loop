@@ -10,11 +10,18 @@ the results back, and stops once Claude returns a final text answer.
 
 ### Run it
 
+From a clone of this repo. The example imports `llm-agent-loop`, which resolves
+to the built `dist/`, so build first:
+
 ```bash
-npm install llm-agent-loop @anthropic-ai/sdk
+npm install
+npm run build
 export ANTHROPIC_API_KEY=sk-ant-...
 npx tsx examples/anthropic-tool-call.ts
 ```
+
+In your own project you'd install the published package instead:
+`npm install llm-agent-loop @anthropic-ai/sdk`.
 
 > The example calls a paid API and will incur token costs.
 
