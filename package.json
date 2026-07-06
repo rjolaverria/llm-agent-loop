@@ -34,6 +34,9 @@
   ],
   "author": "Rafi Olaverria",
   "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rjolaverria/llm-agent-loop.git"
