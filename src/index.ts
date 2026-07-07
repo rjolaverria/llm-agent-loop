@@ -157,9 +157,12 @@ function isAbortError(error: unknown): boolean {
  * @param options Configuration options for the loop.
  * @returns A promise that resolves to the result of the loop.
  */
-// Without a `signal`, the loop can never resolve with `'aborted'`, so callers
-// keep the original narrow reason union and existing exhaustive handling still
-// compiles. Passing a `signal` widens the reason union to include `'aborted'`.
+// When `signal` is omitted from an inline options literal (so it's inferred as
+// `{ signal?: undefined }`), the first overload applies and `reason` stays the
+// narrow `'stop_condition' | 'max_loops'` union, keeping existing exhaustive
+// handling compiling. Passing a `signal` — or options pre-typed as
+// `AgentLoopOptions` (whose `signal` is optional) — matches the second overload,
+// whose `reason` includes `'aborted'`.
 export function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext> & { signal?: undefined }
 ): Promise<AgentLoopResult<TResponse, TContext, 'stop_condition' | 'max_loops'>>;
