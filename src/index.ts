@@ -225,8 +225,11 @@ export async function agentLoop<TResponse, TContext>(
       // default, a TimeoutError for AbortSignal.timeout(), or a custom reason).
       // Normalize only that cancellation path into a clean 'aborted' result.
       // Other failures (network/provider/application errors) still propagate,
-      // even if they happen to race with an abort.
-      if (signal?.aborted && (error === signal.reason || isAbortError(error))) {
+      // even if they happen to race with an abort. The `reason !== undefined`
+      // guard avoids masking an error that rejects with `undefined` when a
+      // custom signal is aborted without a reason.
+      const matchesReason = signal?.reason !== undefined && error === signal.reason;
+      if (signal?.aborted && (matchesReason || isAbortError(error))) {
         return abortedResult();
       }
       throw error;

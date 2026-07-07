@@ -308,6 +308,21 @@ describe('agentLoop', () => {
     ).rejects.toThrow('request timed out');
   });
 
+  it('should not mask an undefined rejection when a custom signal has no reason', async () => {
+    // A custom (structural) signal aborted without a reason. A real failure that
+    // rejects with `undefined` must not be masked by `error === signal.reason`.
+    const signal: { aborted: boolean; reason?: unknown } = { aborted: false, reason: undefined };
+    const llmCaller = vi.fn(async () => {
+      signal.aborted = true;
+      throw undefined;
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, signal, initialContext: {} })
+    ).rejects.toBeUndefined();
+  });
+
   it('should rethrow a non-abort error even when the signal is aborted', async () => {
     const controller = new AbortController();
     // A real failure that races with an abort must not be masked as 'aborted'.
