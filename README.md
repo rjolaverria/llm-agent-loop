@@ -102,7 +102,7 @@ const result = await agentLoop<string, MyContext>({
 - `reason`: `'stop_condition' | 'max_loops' | 'aborted' | 'error'` - Why the loop stopped (`'aborted'` only with a `signal`; `'error'` only with an `onError` that returned `'stop'`).
 - `iterations`: `number` - Number of iterations performed.
 - `durationMs`: `number` - Total wall-clock time of the loop, in milliseconds.
-- `history?`: `TResponse[]` - Every response in order, including the one that stopped the loop. Present only when `collectHistory: true`; otherwise `undefined`. Unlike `finalContext`, `history` always includes the terminal response, so it's the complete transcript for a `'stop_condition'` stop without the manual append `finalContext` needs.
+- `history?`: `TResponse[]` - Every response in order, including the one that stopped the loop. Present only when `collectHistory: true`; the property is omitted otherwise (so `result.history` is `undefined`). Unlike `finalContext`, `history` always includes the terminal response, so it's the complete transcript for a `'stop_condition'` stop without the manual append `finalContext` needs.
 
 #### Error handling with `onError`
 

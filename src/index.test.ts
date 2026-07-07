@@ -740,22 +740,27 @@ describe('agentLoop', () => {
   it('should measure durationMs from start to settle', async () => {
     // Deterministic timing: startTime reads 1000, the settling read returns 1500.
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValue(1500);
-    const llmCaller = vi.fn().mockResolvedValue('stop');
-    const stopCondition = vi.fn((response) => response === 'stop');
+    try {
+      const llmCaller = vi.fn().mockResolvedValue('stop');
+      const stopCondition = vi.fn((response) => response === 'stop');
 
-    const result = await agentLoop({ llmCaller, stopCondition, initialContext: {} });
+      const result = await agentLoop({ llmCaller, stopCondition, initialContext: {} });
 
-    expect(result.durationMs).toBe(500);
-    nowSpy.mockRestore();
+      expect(result.durationMs).toBe(500);
+    } finally {
+      // Restore even if an assertion throws, so the spy can't leak into later tests.
+      nowSpy.mockRestore();
+    }
   });
 
-  it('should not collect history unless collectHistory is set', async () => {
+  it('should omit history entirely unless collectHistory is set', async () => {
     const llmCaller = vi.fn().mockResolvedValue('stop');
     const stopCondition = vi.fn((response) => response === 'stop');
 
     const result = await agentLoop({ llmCaller, stopCondition, initialContext: {} });
 
     expect(result.history).toBeUndefined();
+    expect('history' in result).toBe(false);
   });
 
   it('should collect every response in order (including the stopping one) when enabled', async () => {
