@@ -148,4 +148,210 @@ describe('agentLoop', () => {
 
     expect(order).toEqual(['call', 'step']);
   });
+
+  it('should not run at all when the signal is already aborted', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: { count: 0 },
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(0);
+    expect(result.finalContext).toEqual({ count: 0 });
+    expect(result.lastResponse).toBeUndefined();
+    expect(llmCaller).not.toHaveBeenCalled();
+  });
+
+  it('should stop with reason "aborted" when the signal aborts mid-loop', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    // Abort during the second iteration's onStep; the loop should detect it at
+    // the top of the third iteration.
+    const onStep = vi.fn((step) => {
+      if (step.iteration === 2) {
+        controller.abort();
+      }
+    });
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      onStep,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(2);
+    expect(llmCaller).toHaveBeenCalledTimes(2);
+  });
+
+  it('should reflect signal abort in onStep willStop within the same iteration', async () => {
+    const controller = new AbortController();
+    // Abort during stopCondition of the first iteration, before onStep runs.
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn(() => {
+      controller.abort();
+      return false;
+    });
+    const onStep = vi.fn();
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      onStep,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    // willStop should be true even though the stop condition returned false,
+    // because the signal is now aborted and the loop will stop next iteration.
+    expect(onStep.mock.calls[0][0].willStop).toBe(true);
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(1);
+  });
+
+  it('should report "aborted" for an already-aborted signal even when maxLoops is 0', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      maxLoops: 0,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(0);
+    expect(llmCaller).not.toHaveBeenCalled();
+  });
+
+  it('should resolve "aborted" when an in-flight llmCaller rejects after abort', async () => {
+    const controller = new AbortController();
+    // Simulate a caller who forwarded the signal into fetch: the in-flight call
+    // rejects with an AbortError once the signal aborts.
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(1);
+  });
+
+  it('should rethrow llmCaller errors when the signal is not aborted', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockRejectedValue(new Error('network down'));
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, signal: controller.signal, initialContext: {} })
+    ).rejects.toThrow('network down');
+  });
+
+  it('should resolve "aborted" when a forwarded signal rejects with its reason (timeout)', async () => {
+    const controller = new AbortController();
+    const timeoutReason = new DOMException('The operation timed out', 'TimeoutError');
+    // Simulate a forwarded signal: fetch/an SDK rejects with `signal.reason`,
+    // which for a timeout/custom abort is not a plain AbortError.
+    const llmCaller = vi.fn(async () => {
+      controller.abort(timeoutReason);
+      throw controller.signal.reason;
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(1);
+  });
+
+  it('should rethrow an unrelated TimeoutError that races with an abort', async () => {
+    const controller = new AbortController();
+    // The signal aborts with its default reason, but the thrown error is an
+    // unrelated provider request timeout (not signal.reason) — it must propagate.
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw new DOMException('request timed out', 'TimeoutError');
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, signal: controller.signal, initialContext: {} })
+    ).rejects.toThrow('request timed out');
+  });
+
+  it('should not mask an undefined rejection when a custom signal has no reason', async () => {
+    // A custom (structural) signal aborted without a reason. A real failure that
+    // rejects with `undefined` must not be masked by `error === signal.reason`.
+    const signal: { aborted: boolean; reason?: unknown } = { aborted: false, reason: undefined };
+    const llmCaller = vi.fn(async () => {
+      signal.aborted = true;
+      throw undefined;
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, signal, initialContext: {} })
+    ).rejects.toBeUndefined();
+  });
+
+  it('should rethrow a non-abort error even when the signal is aborted', async () => {
+    const controller = new AbortController();
+    // A real failure that races with an abort must not be masked as 'aborted'.
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw new Error('provider 500');
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, signal: controller.signal, initialContext: {} })
+    ).rejects.toThrow('provider 500');
+  });
+
+  it('should complete normally when a signal is provided but never aborted', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('response1')
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('stop_condition');
+    expect(result.iterations).toBe(2);
+  });
 });
