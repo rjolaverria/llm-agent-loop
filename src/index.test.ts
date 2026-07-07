@@ -354,4 +354,84 @@ describe('agentLoop', () => {
     expect(result.reason).toBe('stop_condition');
     expect(result.iterations).toBe(2);
   });
+
+  it('should run exactly maxLoops times when stopCondition is omitted', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+
+    const result = await agentLoop({
+      llmCaller,
+      maxLoops: 3,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('max_loops');
+    expect(result.iterations).toBe(3);
+    expect(llmCaller).toHaveBeenCalledTimes(3);
+  });
+
+  it('should default to maxLoops=10 when stopCondition is omitted', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+
+    const result = await agentLoop({
+      llmCaller,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('max_loops');
+    expect(result.iterations).toBe(10);
+    expect(llmCaller).toHaveBeenCalledTimes(10);
+  });
+
+  it('should set willStop only on the final iteration when stopCondition is omitted', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const onStep = vi.fn();
+
+    await agentLoop({
+      llmCaller,
+      onStep,
+      maxLoops: 3,
+      initialContext: {},
+    });
+
+    expect(onStep).toHaveBeenCalledTimes(3);
+    expect(onStep.mock.calls[0][0].willStop).toBe(false);
+    expect(onStep.mock.calls[1][0].willStop).toBe(false);
+    expect(onStep.mock.calls[2][0].willStop).toBe(true);
+  });
+
+  it('should still honor an abort signal when stopCondition is omitted', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const onStep = vi.fn((step) => {
+      if (step.iteration === 2) {
+        controller.abort();
+      }
+    });
+
+    const result = await agentLoop({
+      llmCaller,
+      onStep,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(2);
+  });
+
+  it('should still update context between iterations when stopCondition is omitted', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const updateContext = vi.fn((_, ctx: { count: number }) => ({ count: ctx.count + 1 }));
+
+    const result = await agentLoop({
+      llmCaller,
+      updateContext,
+      maxLoops: 3,
+      initialContext: { count: 0 },
+    });
+
+    expect(result.reason).toBe('max_loops');
+    expect(result.finalContext).toEqual({ count: 3 });
+  });
 });

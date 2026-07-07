@@ -70,11 +70,11 @@ Runs the agent loop.
 #### Options
 
 - `llmCaller`: `(context: TContext) => Promise<TResponse>` - Function to call the LLM.
-- `stopCondition`: `(response: TResponse, context: TContext) => boolean | Promise<boolean>` - Predicate to stop the loop.
-- `maxLoops`: `number` (default: 10) - Maximum number of iterations.
-- `updateContext`: `(response: TResponse, context: TContext) => TContext | Promise<TContext>` - Optional function to update context.
-- `onStep`: `(step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>` - Optional per-iteration callback for observability (logging, tracing, progress, token accounting). Called after each LLM response and stop-condition check, before `updateContext` runs. If it returns a promise, the loop awaits it.
-- `signal`: `AbortSignal` - Optional signal to cancel the loop. Checked at the start of each iteration; if aborted, the loop resolves with `reason: 'aborted'` (it does not throw). An in-flight `llmCaller` is not interrupted — forward the signal into your `llmCaller` (e.g. to `fetch`) to abort the call itself.
+- `stopCondition?`: `(response: TResponse, context: TContext) => boolean | Promise<boolean>` - Optional predicate to stop the loop early. If omitted, the loop never stops early and runs until `maxLoops` (or the `signal` aborts).
+- `maxLoops?`: `number` (default: 10) - Maximum number of iterations.
+- `updateContext?`: `(response: TResponse, context: TContext) => TContext | Promise<TContext>` - Optional function to update context.
+- `onStep?`: `(step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>` - Optional per-iteration callback for observability (logging, tracing, progress, token accounting). Called after each LLM response and stop-condition check, before `updateContext` runs. If it returns a promise, the loop awaits it.
+- `signal?`: `AbortSignal` - Optional signal to cancel the loop. Checked at the start of each iteration; if aborted, the loop resolves with `reason: 'aborted'` (it does not throw). An in-flight `llmCaller` is not interrupted — forward the signal into your `llmCaller` (e.g. to `fetch`) to abort the call itself.
 - `initialContext`: `TContext` - Initial state.
 
 Each `onStep` receives an `AgentLoopStep`:
@@ -99,6 +99,20 @@ const result = await agentLoop<string, MyContext>({
 - `lastResponse`: `TResponse | undefined` - The last response from the LLM.
 - `reason`: `'stop_condition' | 'max_loops' | 'aborted'` - Why the loop stopped.
 - `iterations`: `number` - Number of iterations performed.
+
+#### Fixed-iteration loops (no `stopCondition`)
+
+`stopCondition` is optional. Omit it to run a fixed number of turns and let `maxLoops` terminate the loop — no `() => false` boilerplate required:
+
+```typescript
+const result = await agentLoop<string, MyContext>({
+  initialContext: { messages: [] },
+  llmCaller: async (ctx) => "Response from LLM",
+  maxLoops: 3, // run exactly 3 iterations
+});
+
+console.log(result.reason); // 'max_loops'
+```
 
 #### Cancellation with `AbortSignal`
 
