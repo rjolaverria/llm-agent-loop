@@ -14,6 +14,11 @@ export interface AgentLoopStep<TResponse, TContext> {
 
   /**
    * The context that produced this response (before `updateContext` runs).
+   *
+   * This is the live context reference, not a snapshot. If your `updateContext`
+   * mutates the context in place (rather than returning a new object), a
+   * retained `context` may reflect later changes. Copy it inside `onStep` if you
+   * need a stable snapshot.
    */
   context: TContext;
 
