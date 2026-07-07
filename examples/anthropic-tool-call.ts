@@ -108,7 +108,7 @@ async function main() {
 
   // NOTE: because the loop stops *before* updateContext runs on the final turn,
   // the last assistant answer is NOT in `finalContext.messages` — it lives on
-  // `lastResponse`. See the README "final response" note for details.
+  // `lastResponse`, which is why we read the answer from there below.
   const finalText = result.lastResponse?.content.find(
     (b): b is Anthropic.TextBlock => b.type === 'text'
   );
@@ -118,5 +118,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Agent loop failed:', err);
+  console.error('Agent loop failed:');
+  // Rethrow so the process exits with a non-zero status (e.g. on a missing
+  // ANTHROPIC_API_KEY, a 401, or a rate-limit error) instead of looking
+  // successful to shells and CI.
+  throw err;
 });

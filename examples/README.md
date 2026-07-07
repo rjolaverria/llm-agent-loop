@@ -31,9 +31,9 @@ In your own project you'd install the published package instead:
 - Driving a multi-turn tool-use loop via `updateContext` (append the assistant
   turn, run the tools, append `tool_result` messages).
 - Stopping on `stop_reason === 'end_turn'`.
-- Reading the final answer from `result.lastResponse` — note that the terminating
-  response is intentionally *not* folded into `finalContext` (see the "final
-  response" note in the [root README](../README.md#api)).
+- Reading the final answer from `result.lastResponse` — because the loop stops
+  *before* `updateContext` runs on the final turn, the terminating response is
+  intentionally *not* folded into `finalContext`.
 
 The same flow is exercised without a real API key in
 [`src/claude_simulation.test.ts`](../src/claude_simulation.test.ts).
