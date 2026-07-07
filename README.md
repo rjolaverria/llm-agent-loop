@@ -82,7 +82,7 @@ Each `onStep` receives an `AgentLoopStep`:
 - `iteration`: `number` - 1-based index of the current iteration.
 - `response`: `TResponse` - The response from `llmCaller` this iteration.
 - `context`: `TContext` - The context that produced this response (before `updateContext` runs). This is the live reference, not a snapshot — if your `updateContext` mutates in place, copy it inside `onStep` for a stable snapshot.
-- `willStop`: `boolean` - Whether the loop will stop after this iteration (stop condition met or `maxLoops` reached).
+- `willStop`: `boolean` - Whether the loop will stop after this iteration (stop condition met, `maxLoops` reached, or the `signal` was aborted).
 
 ```typescript
 const result = await agentLoop<string, MyContext>({

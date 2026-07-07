@@ -104,7 +104,7 @@ export type AgentLoopReason = 'stop_condition' | 'max_loops' | 'aborted';
 export interface AgentLoopResult<
   TResponse,
   TContext,
-  TReason extends AgentLoopReason = AgentLoopReason,
+  TReason extends AgentLoopReason = 'stop_condition' | 'max_loops',
 > {
   /**
    * The final context after the loop finished.
@@ -168,7 +168,7 @@ export function agentLoop<TResponse, TContext>(
 ): Promise<AgentLoopResult<TResponse, TContext, AgentLoopReason>>;
 export async function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext>
-): Promise<AgentLoopResult<TResponse, TContext>> {
+): Promise<AgentLoopResult<TResponse, TContext, AgentLoopReason>> {
   const { llmCaller, stopCondition, maxLoops = 10, updateContext, onStep, signal, initialContext } =
     options;
 
@@ -176,7 +176,7 @@ export async function agentLoop<TResponse, TContext>(
   let lastResponse: TResponse | undefined;
   let iterations = 0;
 
-  const abortedResult = (): AgentLoopResult<TResponse, TContext> => ({
+  const abortedResult = (): AgentLoopResult<TResponse, TContext, AgentLoopReason> => ({
     finalContext: currentContext,
     lastResponse,
     reason: 'aborted',
