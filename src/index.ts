@@ -55,11 +55,15 @@ export interface AgentLoopOptions<TResponse, TContext> {
   llmCaller: (context: TContext) => Promise<TResponse>;
 
   /**
-   * A predicate function that determines whether to stop the loop.
+   * Optional predicate that determines whether to stop the loop early.
    * It receives the response from the LLM and the current context.
-   * If it returns true, the loop stops.
+   * If it returns true, the loop stops with `reason: 'stop_condition'`.
+   *
+   * If omitted, the loop never stops early: it runs until `maxLoops` is
+   * reached (or the `signal` aborts). This is convenient for "run exactly N
+   * turns" loops without the `() => false` boilerplate.
    */
-  stopCondition: (response: TResponse, context: TContext) => boolean | Promise<boolean>;
+  stopCondition?: (response: TResponse, context: TContext) => boolean | Promise<boolean>;
 
   /**
    * The maximum number of loops to run.
@@ -180,6 +184,12 @@ function isAbortError(error: unknown): boolean {
 // handling compiling. Passing a `signal` — or options pre-typed as
 // `AgentLoopOptions` (whose `signal` is optional) — matches the second overload,
 // whose `reason` includes `'aborted'`.
+//
+// Omitting `stopCondition` means `reason` can never actually be
+// `'stop_condition'`, but the union is left as-is (a safe superset). Narrowing
+// it away would require multiplying the overloads across the stopCondition
+// present/absent axis for little gain, and widening a result type never breaks
+// an exhaustive consumer.
 export function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext> & { signal?: undefined }
 ): Promise<AgentLoopResult<TResponse, TContext, 'stop_condition' | 'max_loops'>>;
@@ -236,7 +246,7 @@ export async function agentLoop<TResponse, TContext>(
     }
     lastResponse = response;
 
-    const shouldStop = await stopCondition(response, currentContext);
+    const shouldStop = stopCondition ? await stopCondition(response, currentContext) : false;
 
     if (onStep) {
       await onStep({
