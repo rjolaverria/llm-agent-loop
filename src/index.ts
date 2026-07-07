@@ -341,11 +341,23 @@ export async function agentLoop<TResponse, TContext>(
         // *transition* (the caller cancels while onError runs) from a genuine
         // error that merely raced with a prior abort.
         const abortedBeforeHandler = Boolean(signal?.aborted);
-        const action = await onError(error, {
-          context: currentContext,
-          iteration: iterations,
-          attempt,
-        });
+        let action: AgentLoopErrorAction;
+        try {
+          action = await onError(error, {
+            context: currentContext,
+            iteration: iterations,
+            attempt,
+          });
+        } catch (handlerError) {
+          // If the caller cancelled while onError was running, honor the abort
+          // over the handler's own rejection — the same precedence applied to a
+          // handler that aborts and then returns an action. Otherwise the
+          // handler error, like any programming error, propagates.
+          if (!abortedBeforeHandler && signal?.aborted) {
+            return abortedResult();
+          }
+          throw handlerError;
+        }
 
         // An abort that lands *during* the handler outranks the returned
         // action: the caller cancelled mid-decision, so resolve 'aborted'

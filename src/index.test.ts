@@ -628,6 +628,39 @@ describe('agentLoop', () => {
     expect(result.reason).toBe('aborted');
   });
 
+  it('should honor a transition abort when onError itself throws', async () => {
+    // onError rejects (rather than returning an action) while the caller
+    // cancels mid-handler. The abort takes precedence over the handler's throw.
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockRejectedValue(new Error('network down'));
+    const onError = vi.fn(async () => {
+      controller.abort();
+      await Promise.resolve();
+      throw new Error('handler blew up');
+    });
+
+    const result = await agentLoop({
+      llmCaller,
+      onError,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+  });
+
+  it("should propagate onError's own throw when the signal is not aborted", async () => {
+    const llmCaller = vi.fn().mockRejectedValue(new Error('network down'));
+    const handlerError = new Error('handler blew up');
+    const onError = vi.fn(() => {
+      throw handlerError;
+    });
+
+    await expect(
+      agentLoop({ llmCaller, onError, initialContext: {} })
+    ).rejects.toBe(handlerError);
+  });
+
   it('should still validate the onError action when the signal was already aborted', async () => {
     // The signal aborts during llmCaller, but the provider throws its own
     // (non-abort) error. A mis-typed action must still surface as a TypeError,
