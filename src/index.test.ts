@@ -293,6 +293,21 @@ describe('agentLoop', () => {
     expect(result.iterations).toBe(1);
   });
 
+  it('should rethrow an unrelated TimeoutError that races with an abort', async () => {
+    const controller = new AbortController();
+    // The signal aborts with its default reason, but the thrown error is an
+    // unrelated provider request timeout (not signal.reason) — it must propagate.
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw new DOMException('request timed out', 'TimeoutError');
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, signal: controller.signal, initialContext: {} })
+    ).rejects.toThrow('request timed out');
+  });
+
   it('should rethrow a non-abort error even when the signal is aborted', async () => {
     const controller = new AbortController();
     // A real failure that races with an abort must not be masked as 'aborted'.

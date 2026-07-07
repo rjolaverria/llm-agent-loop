@@ -140,15 +140,17 @@ export interface AgentLoopResult<
 /**
  * Whether an error is an abort-related rejection (e.g. from an aborted `fetch`).
  * Standard `AbortSignal`-aware APIs reject with a `DOMException` whose `name` is
- * `'AbortError'`, or `'TimeoutError'` for signals created via
- * `AbortSignal.timeout()`.
+ * `'AbortError'`. Timeout/custom-reason aborts are matched separately via
+ * `error === signal.reason`, so `'TimeoutError'` is intentionally not treated as
+ * an abort here — an unrelated provider `TimeoutError` must still propagate.
  */
 function isAbortError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null || !('name' in error)) {
-    return false;
-  }
-  const name = (error as { name?: unknown }).name;
-  return name === 'AbortError' || name === 'TimeoutError';
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error as { name?: unknown }).name === 'AbortError'
+  );
 }
 
 /**
