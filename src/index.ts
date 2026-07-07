@@ -139,16 +139,16 @@ export interface AgentLoopResult<
 
 /**
  * Whether an error is an abort-related rejection (e.g. from an aborted `fetch`).
- * Standard `AbortSignal`-aware APIs reject with an error whose `name` is
- * `'AbortError'` (a `DOMException` in the DOM/fetch case).
+ * Standard `AbortSignal`-aware APIs reject with a `DOMException` whose `name` is
+ * `'AbortError'`, or `'TimeoutError'` for signals created via
+ * `AbortSignal.timeout()`.
  */
 function isAbortError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    (error as { name?: unknown }).name === 'AbortError'
-  );
+  if (typeof error !== 'object' || error === null || !('name' in error)) {
+    return false;
+  }
+  const name = (error as { name?: unknown }).name;
+  return name === 'AbortError' || name === 'TimeoutError';
 }
 
 /**
@@ -204,11 +204,12 @@ export async function agentLoop<TResponse, TContext>(
       response = await llmCaller(currentContext);
     } catch (error) {
       // If the caller forwarded this signal into llmCaller/fetch, aborting an
-      // in-flight request rejects with an AbortError. Normalize only that
-      // cancellation path into a clean 'aborted' result. Other failures
-      // (network/provider/application errors) still propagate, even if they
-      // happen to race with an abort.
-      if (signal?.aborted && isAbortError(error)) {
+      // in-flight request rejects with the signal's `reason` (an AbortError by
+      // default, a TimeoutError for AbortSignal.timeout(), or a custom reason).
+      // Normalize only that cancellation path into a clean 'aborted' result.
+      // Other failures (network/provider/application errors) still propagate,
+      // even if they happen to race with an abort.
+      if (signal?.aborted && (error === signal.reason || isAbortError(error))) {
         return abortedResult();
       }
       throw error;

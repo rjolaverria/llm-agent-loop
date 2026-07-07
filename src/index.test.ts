@@ -271,6 +271,28 @@ describe('agentLoop', () => {
     ).rejects.toThrow('network down');
   });
 
+  it('should resolve "aborted" when a forwarded signal rejects with its reason (timeout)', async () => {
+    const controller = new AbortController();
+    const timeoutReason = new DOMException('The operation timed out', 'TimeoutError');
+    // Simulate a forwarded signal: fetch/an SDK rejects with `signal.reason`,
+    // which for a timeout/custom abort is not a plain AbortError.
+    const llmCaller = vi.fn(async () => {
+      controller.abort(timeoutReason);
+      throw controller.signal.reason;
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(1);
+  });
+
   it('should rethrow a non-abort error even when the signal is aborted', async () => {
     const controller = new AbortController();
     // A real failure that races with an abort must not be masked as 'aborted'.
