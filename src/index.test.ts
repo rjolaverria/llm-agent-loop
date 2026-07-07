@@ -80,4 +80,72 @@ describe('agentLoop', () => {
     expect(result.reason).toBe('stop_condition');
     expect(result.iterations).toBe(1);
   });
+
+  it('should invoke onStep once per iteration with structured data', async () => {
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('response1')
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+    const updateContext = vi.fn((_, ctx: { count: number }) => ({ count: ctx.count + 1 }));
+    const onStep = vi.fn();
+
+    await agentLoop({
+      llmCaller,
+      stopCondition,
+      updateContext,
+      onStep,
+      initialContext: { count: 0 },
+    });
+
+    expect(onStep).toHaveBeenCalledTimes(2);
+    // First iteration: does not stop, context is the initial (pre-update) context.
+    expect(onStep).toHaveBeenNthCalledWith(1, {
+      iteration: 1,
+      response: 'response1',
+      context: { count: 0 },
+      willStop: false,
+    });
+    // Second iteration: stop condition met, context reflects the one update.
+    expect(onStep).toHaveBeenNthCalledWith(2, {
+      iteration: 2,
+      response: 'stop',
+      context: { count: 1 },
+      willStop: true,
+    });
+  });
+
+  it('should set willStop when max loops is reached', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    const onStep = vi.fn();
+
+    await agentLoop({
+      llmCaller,
+      stopCondition,
+      onStep,
+      maxLoops: 2,
+      initialContext: {},
+    });
+
+    expect(onStep).toHaveBeenCalledTimes(2);
+    expect(onStep.mock.calls[0][0].willStop).toBe(false);
+    expect(onStep.mock.calls[1][0].willStop).toBe(true);
+  });
+
+  it('should await an async onStep before continuing', async () => {
+    const order: string[] = [];
+    const llmCaller = vi.fn(async () => {
+      order.push('call');
+      return 'stop';
+    });
+    const stopCondition = vi.fn((response) => response === 'stop');
+    const onStep = vi.fn(async () => {
+      await Promise.resolve();
+      order.push('step');
+    });
+
+    await agentLoop({ llmCaller, stopCondition, onStep, initialContext: {} });
+
+    expect(order).toEqual(['call', 'step']);
+  });
 });
