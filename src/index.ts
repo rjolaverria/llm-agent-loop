@@ -163,6 +163,14 @@ export interface AgentLoopOptions<TResponse, TContext> {
   signal?: AgentLoopAbortSignal;
 
   /**
+   * When `true`, the result includes a `history` array holding every response
+   * in order (including the final response that stopped the loop). Off by
+   * default to avoid retaining every response for long-running loops; opt in
+   * when you need the full transcript for debugging or replay.
+   */
+  collectHistory?: boolean;
+
+  /**
    * Initial context to start the loop with.
    */
   initialContext: TContext;
@@ -221,6 +229,24 @@ export interface AgentLoopResult<
    * The number of iterations performed.
    */
   iterations: number;
+
+  /**
+   * Total wall-clock time the loop ran, in milliseconds (measured with
+   * `Date.now()` from just before the first iteration to when the loop
+   * settled).
+   */
+  durationMs: number;
+
+  /**
+   * Every response in order, including the final response that stopped the
+   * loop. Present only when `collectHistory: true` was passed; otherwise
+   * `undefined`.
+   *
+   * Unlike `finalContext`, `history` always includes the terminal response —
+   * so for a `'stop_condition'` stop it is the complete transcript of responses
+   * without the manual `lastResponse` append `finalContext` requires.
+   */
+  history?: TResponse[];
 }
 
 /**
@@ -274,19 +300,33 @@ export async function agentLoop<TResponse, TContext>(
     onStep,
     onError,
     signal,
+    collectHistory,
     initialContext,
   } = options;
 
+  const startTime = Date.now();
   let currentContext = initialContext;
   let lastResponse: TResponse | undefined;
   let iterations = 0;
+  // Only allocate the transcript when opted in, so long loops don't retain
+  // every response by default.
+  const history: TResponse[] | undefined = collectHistory ? [] : undefined;
 
-  const abortedResult = (): AgentLoopResult<TResponse, TContext, AgentLoopReason> => ({
+  // Single exit point for the common result shape, so `durationMs` and
+  // `history` are applied consistently at every return site.
+  const settle = (
+    reason: AgentLoopReason
+  ): AgentLoopResult<TResponse, TContext, AgentLoopReason> => ({
     finalContext: currentContext,
     lastResponse,
-    reason: 'aborted',
+    reason,
     iterations,
+    durationMs: Date.now() - startTime,
+    history,
   });
+
+  const abortedResult = (): AgentLoopResult<TResponse, TContext, AgentLoopReason> =>
+    settle('aborted');
 
   // Handle an already-aborted signal even when the loop body never runs
   // (e.g. maxLoops <= 0).
@@ -372,12 +412,7 @@ export async function agentLoop<TResponse, TContext>(
           continue;
         }
         if (action === 'stop') {
-          return {
-            finalContext: currentContext,
-            lastResponse,
-            reason: 'error',
-            iterations,
-          };
+          return settle('error');
         }
         if (action === 'throw') {
           // The default action: re-raise the original error unchanged.
@@ -396,6 +431,7 @@ export async function agentLoop<TResponse, TContext>(
       }
     }
     lastResponse = response;
+    history?.push(response);
 
     const shouldStop = stopCondition ? await stopCondition(response, currentContext) : false;
 
@@ -409,12 +445,7 @@ export async function agentLoop<TResponse, TContext>(
     }
 
     if (shouldStop) {
-      return {
-        finalContext: currentContext,
-        lastResponse,
-        reason: 'stop_condition',
-        iterations,
-      };
+      return settle('stop_condition');
     }
 
     if (updateContext) {
@@ -422,10 +453,5 @@ export async function agentLoop<TResponse, TContext>(
     }
   }
 
-  return {
-    finalContext: currentContext,
-    lastResponse,
-    reason: 'max_loops',
-    iterations,
-  };
+  return settle('max_loops');
 }

@@ -76,6 +76,7 @@ Runs the agent loop.
 - `onStep?`: `(step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>` - Optional per-iteration callback for observability (logging, tracing, progress, token accounting). Called after each LLM response and stop-condition check, before `updateContext` runs. If it returns a promise, the loop awaits it.
 - `onError?`: `(error: unknown, info: AgentLoopErrorInfo<TContext>) => 'retry' | 'stop' | 'throw' | Promise<...>` - Optional handler for errors thrown by `llmCaller`. Decide per-error whether to `'retry'` the call, `'stop'` the loop (resolving with `reason: 'error'`), or `'throw'` (re-raise). Only `llmCaller` failures are routed here; errors from `stopCondition`/`updateContext`/`onStep` and aborts always take precedence. See [Error handling](#error-handling-with-onerror).
 - `signal?`: `AbortSignal` - Optional signal to cancel the loop. Checked at the start of each iteration; if aborted, the loop resolves with `reason: 'aborted'` (it does not throw). An in-flight `llmCaller` is not interrupted — forward the signal into your `llmCaller` (e.g. to `fetch`) to abort the call itself.
+- `collectHistory?`: `boolean` (default: false) - When true, the result includes a `history` array of every response in order. Opt-in to avoid retaining every response for long-running loops.
 - `initialContext`: `TContext` - Initial state.
 
 Each `onStep` receives an `AgentLoopStep`:
@@ -100,6 +101,8 @@ const result = await agentLoop<string, MyContext>({
 - `lastResponse`: `TResponse | undefined` - The last response from the LLM.
 - `reason`: `'stop_condition' | 'max_loops' | 'aborted' | 'error'` - Why the loop stopped (`'aborted'` only with a `signal`; `'error'` only with an `onError` that returned `'stop'`).
 - `iterations`: `number` - Number of iterations performed.
+- `durationMs`: `number` - Total wall-clock time of the loop, in milliseconds.
+- `history?`: `TResponse[]` - Every response in order, including the one that stopped the loop. Present only when `collectHistory: true`; otherwise `undefined`. Unlike `finalContext`, `history` always includes the terminal response, so it's the complete transcript for a `'stop_condition'` stop without the manual append `finalContext` needs.
 
 #### Error handling with `onError`
 

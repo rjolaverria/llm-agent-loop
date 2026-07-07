@@ -726,4 +726,97 @@ describe('agentLoop', () => {
     // onError only absorbs llmCaller failures, not programming errors elsewhere.
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it('should always report a numeric durationMs', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+
+    const result = await agentLoop({ llmCaller, stopCondition, initialContext: {} });
+
+    expect(typeof result.durationMs).toBe('number');
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('should measure durationMs from start to settle', async () => {
+    // Deterministic timing: startTime reads 1000, the settling read returns 1500.
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValue(1500);
+    const llmCaller = vi.fn().mockResolvedValue('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+
+    const result = await agentLoop({ llmCaller, stopCondition, initialContext: {} });
+
+    expect(result.durationMs).toBe(500);
+    nowSpy.mockRestore();
+  });
+
+  it('should not collect history unless collectHistory is set', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+
+    const result = await agentLoop({ llmCaller, stopCondition, initialContext: {} });
+
+    expect(result.history).toBeUndefined();
+  });
+
+  it('should collect every response in order (including the stopping one) when enabled', async () => {
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('a')
+      .mockResolvedValueOnce('b')
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      collectHistory: true,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('stop_condition');
+    // The terminal 'stop' response is included, unlike finalContext.
+    expect(result.history).toEqual(['a', 'b', 'stop']);
+  });
+
+  it('should collect the full history when the loop hits maxLoops', async () => {
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('r1')
+      .mockResolvedValueOnce('r2');
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      collectHistory: true,
+      maxLoops: 2,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('max_loops');
+    expect(result.history).toEqual(['r1', 'r2']);
+  });
+
+  it('should include only completed responses in history when aborted', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    // Abort during the second iteration; the third never records a response.
+    const onStep = vi.fn((step) => {
+      if (step.iteration === 2) {
+        controller.abort();
+      }
+    });
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      onStep,
+      collectHistory: true,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.history).toEqual(['response', 'response']);
+  });
 });
