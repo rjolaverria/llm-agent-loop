@@ -239,8 +239,9 @@ export interface AgentLoopResult<
 
   /**
    * Every response in order, including the final response that stopped the
-   * loop. Present only when `collectHistory: true` was passed; otherwise
-   * `undefined`.
+   * loop. Present only when `collectHistory: true` was passed; the property is
+   * omitted otherwise (so `result.history` is `undefined` and
+   * `'history' in result` is `false`).
    *
    * Unlike `finalContext`, `history` always includes the terminal response —
    * so for a `'stop_condition'` stop it is the complete transcript of responses
@@ -322,7 +323,10 @@ export async function agentLoop<TResponse, TContext>(
     reason,
     iterations,
     durationMs: Date.now() - startTime,
-    history,
+    // Omit `history` entirely when not collecting, so `'history' in result`
+    // reflects whether collection was enabled (an empty array still means
+    // "collected, zero responses").
+    ...(history !== undefined ? { history } : {}),
   });
 
   const abortedResult = (): AgentLoopResult<TResponse, TContext, AgentLoopReason> =>
