@@ -74,6 +74,7 @@ Runs the agent loop.
 - `maxLoops?`: `number` (default: 10) - Maximum number of iterations.
 - `updateContext?`: `(response: TResponse, context: TContext) => TContext | Promise<TContext>` - Optional function to update context.
 - `onStep?`: `(step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>` - Optional per-iteration callback for observability (logging, tracing, progress, token accounting). Called after each LLM response and stop-condition check, before `updateContext` runs. If it returns a promise, the loop awaits it.
+- `onError?`: `(error: unknown, info: AgentLoopErrorInfo<TContext>) => 'retry' | 'stop' | 'throw' | Promise<...>` - Optional handler for errors thrown by `llmCaller`. Decide per-error whether to `'retry'` the call, `'stop'` the loop (resolving with `reason: 'error'`), or `'throw'` (re-raise). Only `llmCaller` failures are routed here; errors from `stopCondition`/`updateContext`/`onStep` and aborts always take precedence. See [Error handling](#error-handling-with-onerror).
 - `signal?`: `AbortSignal` - Optional signal to cancel the loop. Checked at the start of each iteration; if aborted, the loop resolves with `reason: 'aborted'` (it does not throw). An in-flight `llmCaller` is not interrupted — forward the signal into your `llmCaller` (e.g. to `fetch`) to abort the call itself.
 - `initialContext`: `TContext` - Initial state.
 
@@ -97,8 +98,32 @@ const result = await agentLoop<string, MyContext>({
 
 - `finalContext`: `TContext` - The context after the loop finishes. See the note below about the final response.
 - `lastResponse`: `TResponse | undefined` - The last response from the LLM.
-- `reason`: `'stop_condition' | 'max_loops' | 'aborted'` - Why the loop stopped.
+- `reason`: `'stop_condition' | 'max_loops' | 'aborted' | 'error'` - Why the loop stopped (`'aborted'` only with a `signal`; `'error'` only with an `onError` that returned `'stop'`).
 - `iterations`: `number` - Number of iterations performed.
+
+#### Error handling with `onError`
+
+By default, a single rejected `llmCaller` call rejects the whole loop and discards accumulated context. Since agent loops are long-lived and expect transient failures (rate limits, network blips), pass an `onError` handler to decide what to do per-error:
+
+```typescript
+const result = await agentLoop<string, MyContext>({
+  // ...
+  onError: (error, { attempt }) => {
+    if (attempt < 3) return 'retry'; // re-call llmCaller (same iteration)
+    return 'throw';                  // give up after 3 attempts
+  },
+});
+```
+
+The handler returns one of:
+
+- `'retry'` — call `llmCaller` again with the same context. Retries stay within the same iteration (they don't consume a `maxLoops` turn) and are **caller-bounded**: use `attempt` from the handler's second argument (`info`, destructured as `{ attempt }` above; 1-based, increments per retry) to stop, or the loop retries forever.
+- `'stop'` — stop the loop gracefully; the result's `reason` is `'error'`.
+- `'throw'` — re-throw the original error (the default when no `onError` is given).
+
+`info` is `{ context, iteration, attempt }`. Only `llmCaller` failures are routed to `onError` — errors thrown by `stopCondition`, `updateContext`, or `onStep` are treated as programming errors and always propagate. An aborted `signal` takes precedence: an abort-caused rejection resolves `'aborted'` without calling `onError`, and if the signal aborts *while* `onError` is running the loop resolves `'aborted'` regardless of the returned action.
+
+> A handler that ignores its arguments and returns a bare constant (e.g. `() => 'stop'`) needs `as const` or a return annotation (`(): AgentLoopErrorAction => 'stop'`) so TypeScript infers the literal. Handlers that inspect `error`/`info` don't need this.
 
 #### Fixed-iteration loops (no `stopCondition`)
 
