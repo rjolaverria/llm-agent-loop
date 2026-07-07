@@ -628,6 +628,41 @@ describe('agentLoop', () => {
     expect(result.reason).toBe('aborted');
   });
 
+  it('should still validate the onError action when the signal was already aborted', async () => {
+    // The signal aborts during llmCaller, but the provider throws its own
+    // (non-abort) error. A mis-typed action must still surface as a TypeError,
+    // not be masked as 'aborted' by the already-aborted signal.
+    const controller = new AbortController();
+    const original = new Error('provider 500');
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw original;
+    });
+    const onError = vi.fn(() => 'stpo' as unknown as 'throw');
+
+    await expect(
+      agentLoop({ llmCaller, onError, signal: controller.signal, initialContext: {} })
+    ).rejects.toThrow(TypeError);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('should still propagate a genuine error on "throw" when the signal was already aborted', async () => {
+    // A genuine error that merely raced with an earlier abort is routed to
+    // onError; returning 'throw' propagates the original error rather than
+    // masking it as 'aborted' (consistent with the no-onError behavior).
+    const controller = new AbortController();
+    const original = new Error('provider 500');
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw original;
+    });
+    const onError = vi.fn().mockReturnValue('throw');
+
+    await expect(
+      agentLoop({ llmCaller, onError, signal: controller.signal, initialContext: {} })
+    ).rejects.toBe(original);
+  });
+
   it('should throw a clear TypeError when onError returns an invalid action', async () => {
     const original = new Error('provider 500');
     const llmCaller = vi.fn().mockRejectedValue(original);

@@ -307,6 +307,13 @@ export async function agentLoop<TResponse, TContext>(
     // increments per retry so callers can bound retries via `info.attempt`.
     let attempt = 0;
     for (;;) {
+      // Never (re)call llmCaller once the signal is aborted. On the first
+      // attempt the outer while-loop already guarantees this; on a retry it
+      // stops the loop from spinning after a mid-handler cancel.
+      if (signal?.aborted) {
+        return abortedResult();
+      }
+
       attempt++;
       try {
         response = await llmCaller(currentContext);
@@ -330,17 +337,22 @@ export async function agentLoop<TResponse, TContext>(
           throw error;
         }
 
+        // Remember whether the signal was already aborted so we can tell a
+        // *transition* (the caller cancels while onError runs) from a genuine
+        // error that merely raced with a prior abort.
+        const abortedBeforeHandler = Boolean(signal?.aborted);
         const action = await onError(error, {
           context: currentContext,
           iteration: iterations,
           attempt,
         });
 
-        // An abort that lands while onError is deciding (or awaiting) takes
-        // precedence over the requested action: a cancellation outranks
-        // retry/stop/throw, so we never spin on a retry, never mask the abort
-        // as reason 'error', and never reject with the original error.
-        if (signal?.aborted) {
+        // An abort that lands *during* the handler outranks the returned
+        // action: the caller cancelled mid-decision, so resolve 'aborted'
+        // whatever it says. A genuine error that only raced with an earlier
+        // abort is still handled below (a 'retry' can't spin — see the
+        // top-of-loop guard).
+        if (!abortedBeforeHandler && signal?.aborted) {
           return abortedResult();
         }
 

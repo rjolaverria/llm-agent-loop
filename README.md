@@ -121,7 +121,7 @@ The handler returns one of:
 - `'stop'` — stop the loop gracefully; the result's `reason` is `'error'`.
 - `'throw'` — re-throw the original error (the default when no `onError` is given).
 
-`info` is `{ context, iteration, attempt }`. Only `llmCaller` failures are routed to `onError` — errors thrown by `stopCondition`, `updateContext`, or `onStep` are treated as programming errors and always propagate, and an aborted `signal` takes precedence over `onError`.
+`info` is `{ context, iteration, attempt }`. Only `llmCaller` failures are routed to `onError` — errors thrown by `stopCondition`, `updateContext`, or `onStep` are treated as programming errors and always propagate. An aborted `signal` takes precedence: an abort-caused rejection resolves `'aborted'` without calling `onError`, and if the signal aborts *while* `onError` is running the loop resolves `'aborted'` regardless of the returned action.
 
 > A handler that ignores its arguments and returns a bare constant (e.g. `() => 'stop'`) needs `as const` or a return annotation (`(): AgentLoopErrorAction => 'stop'`) so TypeScript infers the literal. Handlers that inspect `error`/`info` don't need this.
 
