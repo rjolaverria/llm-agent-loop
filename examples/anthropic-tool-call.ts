@@ -68,14 +68,13 @@ async function main() {
     initialContext,
 
     // Call the real Claude API with the running conversation.
-    llmCaller: async (ctx) => {
-      return await client.messages.create({
+    llmCaller: (ctx) =>
+      client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         tools,
         messages: ctx.messages,
-      });
-    },
+      }),
 
     // Stop once Claude gives a normal text answer instead of another tool call.
     stopCondition: (response) => response.stop_reason === 'end_turn',
@@ -118,7 +117,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Agent loop failed:');
+  console.error('Agent loop failed:', err);
   // Rethrow so the process exits with a non-zero status (e.g. on a missing
   // ANTHROPIC_API_KEY, a 401, or a rate-limit error) instead of looking
   // successful to shells and CI.
