@@ -31,6 +31,20 @@ export interface AgentLoopStep<TResponse, TContext> {
 }
 
 /**
+ * Minimal structural subset of `AbortSignal` used by the loop.
+ *
+ * Declared structurally (rather than referencing the ambient DOM `AbortSignal`)
+ * so the published type declarations don't require the DOM lib or `@types/node`.
+ * A real `AbortSignal` from any runtime satisfies this interface.
+ */
+export interface AgentLoopAbortSignal {
+  /** Whether the signal has been aborted. */
+  readonly aborted: boolean;
+  /** The abort reason, if any (used to recognize forwarded aborts). */
+  readonly reason?: unknown;
+}
+
+/**
  * Options for the agent loop.
  */
 export interface AgentLoopOptions<TResponse, TContext> {
@@ -70,14 +84,15 @@ export interface AgentLoopOptions<TResponse, TContext> {
   onStep?: (step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>;
 
   /**
-   * Optional `AbortSignal` used to cancel the loop.
+   * Optional `AbortSignal` used to cancel the loop (typed structurally as
+   * {@link AgentLoopAbortSignal} so the published types stay DOM-free).
    * The signal is checked at the start of each iteration; if it is already
    * aborted the loop stops and resolves with `reason: 'aborted'` (it does not
    * throw). An in-flight `llmCaller` is not interrupted — forward this signal
    * into your `llmCaller` (e.g. to `fetch`) if you also need to abort the call
    * itself.
    */
-  signal?: AbortSignal;
+  signal?: AgentLoopAbortSignal;
 
   /**
    * Initial context to start the loop with.
