@@ -117,7 +117,7 @@ const result = await agentLoop<string, MyContext>({
 
 The handler returns one of:
 
-- `'retry'` — call `llmCaller` again with the same context. Retries stay within the same iteration (they don't consume a `maxLoops` turn) and are **caller-bounded**: use `info.attempt` (1-based, increments per retry) to stop, or the loop retries forever.
+- `'retry'` — call `llmCaller` again with the same context. Retries stay within the same iteration (they don't consume a `maxLoops` turn) and are **caller-bounded**: use `attempt` from the handler's second argument (`info`, destructured as `{ attempt }` above; 1-based, increments per retry) to stop, or the loop retries forever.
 - `'stop'` — stop the loop gracefully; the result's `reason` is `'error'`.
 - `'throw'` — re-throw the original error (the default when no `onError` is given).
 
