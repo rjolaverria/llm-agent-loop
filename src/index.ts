@@ -135,6 +135,11 @@ export interface AgentLoopOptions<TResponse, TContext> {
    * `info.attempt` to stop retrying, or you can loop forever.
    * If it returns a promise, the loop awaits it before acting.
    *
+   * Returning anything other than `'retry'`, `'stop'`, or `'throw'` (e.g. from
+   * a JavaScript or mis-typed consumer) throws a `TypeError` with the original
+   * failure attached as its `cause`, rather than silently defaulting to
+   * `'throw'`.
+   *
    * Note: a handler that ignores its arguments and returns a bare constant
    * action (e.g. `() => 'stop'`) needs `as const` or a return annotation
    * (`(): AgentLoopErrorAction => 'stop'`) so TypeScript infers the literal
@@ -350,8 +355,20 @@ export async function agentLoop<TResponse, TContext>(
             iterations,
           };
         }
-        // 'throw' (the default action): re-raise the original error.
-        throw error;
+        if (action === 'throw') {
+          // The default action: re-raise the original error unchanged.
+          throw error;
+        }
+
+        // Any other value means a misconfigured handler (e.g. a typo'd action
+        // from a JavaScript or mis-typed consumer). Surface it loudly rather
+        // than silently behaving like 'throw', and keep the original failure
+        // reachable as the TypeError's `cause`.
+        const invalidActionError = new TypeError(
+          `onError must return 'retry', 'stop', or 'throw'; received ${String(action)}`
+        );
+        (invalidActionError as Error & { cause?: unknown }).cause = error;
+        throw invalidActionError;
       }
     }
     lastResponse = response;

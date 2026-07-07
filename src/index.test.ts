@@ -628,6 +628,23 @@ describe('agentLoop', () => {
     expect(result.reason).toBe('aborted');
   });
 
+  it('should throw a clear TypeError when onError returns an invalid action', async () => {
+    const original = new Error('provider 500');
+    const llmCaller = vi.fn().mockRejectedValue(original);
+    // A misconfigured/mis-typed handler returns an unrecognized action.
+    const onError = vi.fn(() => 'stpo' as unknown as 'throw');
+
+    await expect(
+      agentLoop({ llmCaller, onError, initialContext: {} })
+    ).rejects.toThrow(TypeError);
+
+    // The original failure is preserved as the TypeError's `cause`.
+    await agentLoop({ llmCaller, onError, initialContext: {} }).catch((err: unknown) => {
+      expect(err).toBeInstanceOf(TypeError);
+      expect((err as { cause?: unknown }).cause).toBe(original);
+    });
+  });
+
   it('should not route stopCondition errors through onError', async () => {
     const llmCaller = vi.fn().mockResolvedValue('response');
     const stopCondition = vi.fn(() => {
