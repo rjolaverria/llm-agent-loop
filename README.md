@@ -73,7 +73,24 @@ Runs the agent loop.
 - `stopCondition`: `(response: TResponse, context: TContext) => boolean | Promise<boolean>` - Predicate to stop the loop.
 - `maxLoops`: `number` (default: 10) - Maximum number of iterations.
 - `updateContext`: `(response: TResponse, context: TContext) => TContext | Promise<TContext>` - Optional function to update context.
+- `onStep`: `(step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>` - Optional per-iteration callback for observability (logging, tracing, progress, token accounting). Called after each LLM response and stop-condition check, before `updateContext` runs. If it returns a promise, the loop awaits it.
 - `initialContext`: `TContext` - Initial state.
+
+Each `onStep` receives an `AgentLoopStep`:
+
+- `iteration`: `number` - 1-based index of the current iteration.
+- `response`: `TResponse` - The response from `llmCaller` this iteration.
+- `context`: `TContext` - The context that produced this response (before `updateContext` runs). This is the live reference, not a snapshot — if your `updateContext` mutates in place, copy it inside `onStep` for a stable snapshot.
+- `willStop`: `boolean` - Whether the loop will stop after this iteration (stop condition met or `maxLoops` reached).
+
+```typescript
+const result = await agentLoop<string, MyContext>({
+  // ...
+  onStep: ({ iteration, response, willStop }) => {
+    console.log(`[step ${iteration}] ${response}${willStop ? ' (last)' : ''}`);
+  },
+});
+```
 
 #### Returns
 

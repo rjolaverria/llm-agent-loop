@@ -1,4 +1,35 @@
 /**
+ * A single iteration of the agent loop, passed to the `onStep` callback.
+ */
+export interface AgentLoopStep<TResponse, TContext> {
+  /**
+   * The 1-based index of the current iteration.
+   */
+  iteration: number;
+
+  /**
+   * The response returned by `llmCaller` during this iteration.
+   */
+  response: TResponse;
+
+  /**
+   * The context that produced this response (before `updateContext` runs).
+   *
+   * This is the live context reference, not a snapshot. If your `updateContext`
+   * mutates the context in place (rather than returning a new object), a
+   * retained `context` may reflect later changes. Copy it inside `onStep` if you
+   * need a stable snapshot.
+   */
+  context: TContext;
+
+  /**
+   * Whether the loop will stop after this iteration — either because the
+   * stop condition was met or because `maxLoops` has been reached.
+   */
+  willStop: boolean;
+}
+
+/**
  * Options for the agent loop.
  */
 export interface AgentLoopOptions<TResponse, TContext> {
@@ -27,6 +58,15 @@ export interface AgentLoopOptions<TResponse, TContext> {
    * This is useful if the context is mutable or if you want to append the response to a history.
    */
   updateContext?: (response: TResponse, context: TContext) => TContext | Promise<TContext>;
+
+  /**
+   * Optional callback invoked once per iteration, after the LLM responds and
+   * the stop condition is evaluated, but before `updateContext` runs.
+   * Useful for logging, tracing, progress UIs, and token accounting without
+   * wrapping your `llmCaller`/`updateContext` in side effects.
+   * If it returns a promise, the loop awaits it before continuing.
+   */
+  onStep?: (step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>;
 
   /**
    * Initial context to start the loop with.
@@ -78,7 +118,7 @@ export interface AgentLoopResult<TResponse, TContext> {
 export async function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext>
 ): Promise<AgentLoopResult<TResponse, TContext>> {
-  const { llmCaller, stopCondition, maxLoops = 10, updateContext, initialContext } = options;
+  const { llmCaller, stopCondition, maxLoops = 10, updateContext, onStep, initialContext } = options;
 
   let currentContext = initialContext;
   let lastResponse: TResponse | undefined;
@@ -91,6 +131,16 @@ export async function agentLoop<TResponse, TContext>(
     lastResponse = response;
 
     const shouldStop = await stopCondition(response, currentContext);
+
+    if (onStep) {
+      await onStep({
+        iteration: iterations,
+        response,
+        context: currentContext,
+        willStop: shouldStop || iterations >= maxLoops,
+      });
+    }
+
     if (shouldStop) {
       return {
         finalContext: currentContext,
