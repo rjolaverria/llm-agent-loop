@@ -331,11 +331,15 @@ export async function agentLoop<TResponse, TContext>(
           attempt,
         });
 
+        // An abort that lands while onError is deciding (or awaiting) takes
+        // precedence over the requested action: a cancellation outranks
+        // retry/stop/throw, so we never spin on a retry, never mask the abort
+        // as reason 'error', and never reject with the original error.
+        if (signal?.aborted) {
+          return abortedResult();
+        }
+
         if (action === 'retry') {
-          // Don't spin on a retry once the signal has aborted.
-          if (signal?.aborted) {
-            return abortedResult();
-          }
           continue;
         }
         if (action === 'stop') {

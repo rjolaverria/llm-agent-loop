@@ -583,6 +583,51 @@ describe('agentLoop', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it('should honor an abort that lands while an async onError is awaited', async () => {
+    // A genuine (non-abort) llmCaller failure routes to onError. While the
+    // async handler is deciding, the signal aborts. The abort must take
+    // precedence over the returned action ('stop' here), resolving 'aborted'
+    // rather than reason 'error'.
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockRejectedValue(new Error('network down'));
+    const onError = vi.fn(async () => {
+      controller.abort();
+      await Promise.resolve();
+      return 'stop' as const;
+    });
+
+    const result = await agentLoop({
+      llmCaller,
+      onError,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+  });
+
+  it('should honor an abort during async onError even when it returns "throw"', async () => {
+    const controller = new AbortController();
+    const error = new Error('provider 500');
+    const llmCaller = vi.fn().mockRejectedValue(error);
+    const onError = vi.fn(async () => {
+      controller.abort();
+      await Promise.resolve();
+      return 'throw' as const;
+    });
+
+    // The abort outranks 'throw': the loop resolves 'aborted' instead of
+    // rejecting with the original error.
+    const result = await agentLoop({
+      llmCaller,
+      onError,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+  });
+
   it('should not route stopCondition errors through onError', async () => {
     const llmCaller = vi.fn().mockResolvedValue('response');
     const stopCondition = vi.fn(() => {
