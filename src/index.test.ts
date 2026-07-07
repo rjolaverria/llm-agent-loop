@@ -434,4 +434,166 @@ describe('agentLoop', () => {
     expect(result.reason).toBe('max_loops');
     expect(result.finalContext).toEqual({ count: 3 });
   });
+
+  it('should reject the loop when llmCaller throws and no onError is provided', async () => {
+    const llmCaller = vi.fn().mockRejectedValue(new Error('rate limited'));
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, initialContext: {} })
+    ).rejects.toThrow('rate limited');
+  });
+
+  it('should re-throw the original error when onError returns "throw"', async () => {
+    const error = new Error('provider 500');
+    const llmCaller = vi.fn().mockRejectedValue(error);
+    const onError = vi.fn().mockReturnValue('throw');
+
+    await expect(
+      agentLoop({ llmCaller, onError, maxLoops: 3, initialContext: {} })
+    ).rejects.toBe(error);
+    // onError is consulted once, and the loop does not continue past the failure.
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(llmCaller).toHaveBeenCalledTimes(1);
+  });
+
+  it('should stop with reason "error" when onError returns "stop"', async () => {
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('response1')
+      .mockRejectedValueOnce(new Error('network down'));
+    const stopCondition = vi.fn().mockReturnValue(false);
+    const updateContext = vi.fn((_, ctx: { count: number }) => ({ count: ctx.count + 1 }));
+    const onError = vi.fn().mockReturnValue('stop');
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      updateContext,
+      onError,
+      maxLoops: 5,
+      initialContext: { count: 0 },
+    });
+
+    expect(result.reason).toBe('error');
+    // The first iteration succeeded (context advanced to 1); the second failed.
+    expect(result.iterations).toBe(2);
+    expect(result.lastResponse).toBe('response1');
+    expect(result.finalContext).toEqual({ count: 1 });
+  });
+
+  it('should retry llmCaller within the same iteration when onError returns "retry"', async () => {
+    const llmCaller = vi.fn()
+      .mockRejectedValueOnce(new Error('transient 1'))
+      .mockRejectedValueOnce(new Error('transient 2'))
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+    const onError = vi.fn().mockReturnValue('retry');
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      onError,
+      maxLoops: 5,
+      initialContext: {},
+    });
+
+    // Two failures were retried, the third call succeeded and stopped the loop —
+    // all within a single iteration (retries don't consume maxLoops turns).
+    expect(result.reason).toBe('stop_condition');
+    expect(result.iterations).toBe(1);
+    expect(llmCaller).toHaveBeenCalledTimes(3);
+    expect(onError).toHaveBeenCalledTimes(2);
+  });
+
+  it('should pass error, context, iteration, and attempt to onError', async () => {
+    const error = new Error('boom');
+    const llmCaller = vi.fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce('ok');
+    const stopCondition = vi.fn().mockReturnValue(true);
+    // Retry once, then let it succeed.
+    const onError = vi.fn().mockReturnValue('retry');
+
+    await agentLoop({
+      llmCaller,
+      stopCondition,
+      onError,
+      initialContext: { label: 'ctx' },
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(error, {
+      context: { label: 'ctx' },
+      iteration: 1,
+      attempt: 1,
+    });
+  });
+
+  it('should let callers bound retries via info.attempt', async () => {
+    const llmCaller = vi.fn().mockRejectedValue(new Error('always fails'));
+    // Retry up to 3 attempts, then give up by throwing.
+    const onError = vi.fn((_error, { attempt }: { attempt: number }) =>
+      attempt < 3 ? 'retry' : 'throw'
+    );
+
+    await expect(
+      agentLoop({ llmCaller, onError, initialContext: {} })
+    ).rejects.toThrow('always fails');
+    // Attempts 1 and 2 retried; attempt 3 threw.
+    expect(llmCaller).toHaveBeenCalledTimes(3);
+    expect(onError).toHaveBeenCalledTimes(3);
+  });
+
+  it('should await an async onError before acting', async () => {
+    const order: string[] = [];
+    const llmCaller = vi.fn(async () => {
+      order.push('call');
+      throw new Error('fail');
+    });
+    const onError = vi.fn(async () => {
+      await Promise.resolve();
+      order.push('onError');
+      return 'stop' as const;
+    });
+
+    const result = await agentLoop({ llmCaller, onError, initialContext: {} });
+
+    expect(result.reason).toBe('error');
+    expect(order).toEqual(['call', 'onError']);
+  });
+
+  it('should let an abort take precedence over onError', async () => {
+    const controller = new AbortController();
+    // The signal aborts and the in-flight call rejects with an AbortError.
+    // This must resolve as 'aborted' without consulting onError.
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    const onError = vi.fn().mockReturnValue('stop');
+
+    const result = await agentLoop({
+      llmCaller,
+      onError,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('should not route stopCondition errors through onError', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn(() => {
+      throw new Error('bad predicate');
+    });
+    const onError = vi.fn().mockReturnValue('stop');
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, onError, initialContext: {} })
+    ).rejects.toThrow('bad predicate');
+    // onError only absorbs llmCaller failures, not programming errors elsewhere.
+    expect(onError).not.toHaveBeenCalled();
+  });
 });

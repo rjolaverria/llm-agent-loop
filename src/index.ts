@@ -45,6 +45,37 @@ export interface AgentLoopAbortSignal {
 }
 
 /**
+ * What the loop should do after `llmCaller` throws and `onError` has run.
+ * - `'retry'`: call `llmCaller` again with the same context (same iteration).
+ * - `'stop'`: stop the loop gracefully and resolve with `reason: 'error'`.
+ * - `'throw'`: re-throw the original error, rejecting the loop's promise.
+ */
+export type AgentLoopErrorAction = 'retry' | 'stop' | 'throw';
+
+/**
+ * Details about a failed `llmCaller` call, passed to `onError`.
+ */
+export interface AgentLoopErrorInfo<TContext> {
+  /**
+   * The context passed to the `llmCaller` call that threw.
+   */
+  context: TContext;
+
+  /**
+   * The 1-based index of the iteration whose `llmCaller` threw.
+   */
+  iteration: number;
+
+  /**
+   * The 1-based attempt number within this iteration. Starts at 1 and
+   * increments each time `onError` returns `'retry'`, so callers can bound
+   * retries without tracking their own counter (e.g.
+   * `(err, { attempt }) => (attempt < 3 ? 'retry' : 'throw')`).
+   */
+  attempt: number;
+}
+
+/**
  * Options for the agent loop.
  */
 export interface AgentLoopOptions<TResponse, TContext> {
@@ -88,6 +119,34 @@ export interface AgentLoopOptions<TResponse, TContext> {
   onStep?: (step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>;
 
   /**
+   * Optional handler for errors thrown by `llmCaller`. Without it, a single
+   * rejected `llmCaller` call rejects the whole loop (the default behavior).
+   * With it, you decide per-error whether to `'retry'` the call, `'stop'` the
+   * loop gracefully (resolving with `reason: 'error'`), or `'throw'` (re-raise).
+   *
+   * Only `llmCaller` failures are routed here. Errors thrown by
+   * `stopCondition`, `updateContext`, or `onStep` always propagate — they are
+   * programming errors, not the transient network/provider failures this hook
+   * is meant to absorb. Aborts (see `signal`) also take precedence and are
+   * never surfaced as errors.
+   *
+   * `'retry'` re-invokes `llmCaller` within the same iteration (it does not
+   * consume a `maxLoops` turn). Retries are caller-bounded: use
+   * `info.attempt` to stop retrying, or you can loop forever.
+   * If it returns a promise, the loop awaits it before acting.
+   *
+   * Note: a handler that ignores its arguments and returns a bare constant
+   * action (e.g. `() => 'stop'`) needs `as const` or a return annotation
+   * (`(): AgentLoopErrorAction => 'stop'`) so TypeScript infers the literal
+   * rather than widening it to `string`. Handlers that inspect the error or
+   * `info` (the common case) don't need this.
+   */
+  onError?: (
+    error: unknown,
+    info: AgentLoopErrorInfo<TContext>
+  ) => AgentLoopErrorAction | Promise<AgentLoopErrorAction>;
+
+  /**
    * Optional `AbortSignal` used to cancel the loop (typed structurally as
    * {@link AgentLoopAbortSignal} so the published types stay DOM-free).
    * The signal is checked at the start of each iteration; if it is already
@@ -110,15 +169,18 @@ export interface AgentLoopOptions<TResponse, TContext> {
  * - `'max_loops'`: the maximum number of iterations was reached.
  * - `'aborted'`: the provided `AbortSignal` was aborted. Only possible when a
  *   `signal` is passed.
+ * - `'error'`: `llmCaller` threw and `onError` returned `'stop'`. Only possible
+ *   when an `onError` handler is passed.
  */
-export type AgentLoopReason = 'stop_condition' | 'max_loops' | 'aborted';
+export type AgentLoopReason = 'stop_condition' | 'max_loops' | 'aborted' | 'error';
 
 /**
  * Result of the agent loop.
  *
- * `TReason` narrows the possible `reason` values. Calls without a `signal`
- * resolve with `'stop_condition' | 'max_loops'`; calls with a `signal` may also
- * resolve with `'aborted'`. See the `agentLoop` overloads.
+ * `TReason` narrows the possible `reason` values. Calls without a `signal` or
+ * `onError` resolve with `'stop_condition' | 'max_loops'`; calls with a `signal`
+ * may also resolve with `'aborted'`, and calls with an `onError` may also
+ * resolve with `'error'`. See the `agentLoop` overloads.
  */
 export interface AgentLoopResult<
   TResponse,
@@ -178,20 +240,20 @@ function isAbortError(error: unknown): boolean {
  * @param options Configuration options for the loop.
  * @returns A promise that resolves to the result of the loop.
  */
-// When `signal` is omitted from an inline options literal (so it's inferred as
-// `{ signal?: undefined }`), the first overload applies and `reason` stays the
-// narrow `'stop_condition' | 'max_loops'` union, keeping existing exhaustive
-// handling compiling. Passing a `signal` — or options pre-typed as
-// `AgentLoopOptions` (whose `signal` is optional) — matches the second overload,
-// whose `reason` includes `'aborted'`.
+// When neither `signal` nor `onError` is present in an inline options literal
+// (so both are inferred as `undefined`), the first overload applies and `reason`
+// stays the narrow `'stop_condition' | 'max_loops'` union, keeping existing
+// exhaustive handling compiling. Passing a `signal` and/or an `onError` — or
+// options pre-typed as `AgentLoopOptions` (whose fields are optional) — matches
+// the second overload, whose `reason` also includes `'aborted'` and `'error'`.
 //
-// Omitting `stopCondition` means `reason` can never actually be
-// `'stop_condition'`, but the union is left as-is (a safe superset). Narrowing
-// it away would require multiplying the overloads across the stopCondition
-// present/absent axis for little gain, and widening a result type never breaks
-// an exhaustive consumer.
+// The wide overload's union is a safe superset: `'aborted'` only actually
+// occurs with a `signal`, `'error'` only with an `onError`, and omitting
+// `stopCondition` rules out `'stop_condition'`. Narrowing precisely would
+// require multiplying overloads across each present/absent axis for little gain,
+// and widening a result type never breaks an exhaustive consumer.
 export function agentLoop<TResponse, TContext>(
-  options: AgentLoopOptions<TResponse, TContext> & { signal?: undefined }
+  options: AgentLoopOptions<TResponse, TContext> & { signal?: undefined; onError?: undefined }
 ): Promise<AgentLoopResult<TResponse, TContext, 'stop_condition' | 'max_loops'>>;
 export function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext>
@@ -199,8 +261,16 @@ export function agentLoop<TResponse, TContext>(
 export async function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext>
 ): Promise<AgentLoopResult<TResponse, TContext, AgentLoopReason>> {
-  const { llmCaller, stopCondition, maxLoops = 10, updateContext, onStep, signal, initialContext } =
-    options;
+  const {
+    llmCaller,
+    stopCondition,
+    maxLoops = 10,
+    updateContext,
+    onStep,
+    onError,
+    signal,
+    initialContext,
+  } = options;
 
   let currentContext = initialContext;
   let lastResponse: TResponse | undefined;
@@ -227,22 +297,58 @@ export async function agentLoop<TResponse, TContext>(
     iterations++;
 
     let response: TResponse;
-    try {
-      response = await llmCaller(currentContext);
-    } catch (error) {
-      // If the caller forwarded this signal into llmCaller/fetch, aborting an
-      // in-flight request rejects with the signal's `reason` (an AbortError by
-      // default, a TimeoutError for AbortSignal.timeout(), or a custom reason).
-      // Normalize only that cancellation path into a clean 'aborted' result.
-      // Other failures (network/provider/application errors) still propagate,
-      // even if they happen to race with an abort. The `reason !== undefined`
-      // guard avoids masking an error that rejects with `undefined` when a
-      // custom signal is aborted without a reason.
-      const matchesReason = signal?.reason !== undefined && error === signal.reason;
-      if (signal?.aborted && (matchesReason || isAbortError(error))) {
-        return abortedResult();
+    // Attempt loop: `onError` may request a retry, re-calling `llmCaller`
+    // without consuming another `maxLoops` turn. `attempt` starts at 1 and
+    // increments per retry so callers can bound retries via `info.attempt`.
+    let attempt = 0;
+    for (;;) {
+      attempt++;
+      try {
+        response = await llmCaller(currentContext);
+        break;
+      } catch (error) {
+        // If the caller forwarded this signal into llmCaller/fetch, aborting an
+        // in-flight request rejects with the signal's `reason` (an AbortError by
+        // default, a TimeoutError for AbortSignal.timeout(), or a custom reason).
+        // Normalize only that cancellation path into a clean 'aborted' result.
+        // An abort is a cancellation, not a failure, so it takes precedence over
+        // `onError` and is never handed to it. The `reason !== undefined` guard
+        // avoids masking an error that rejects with `undefined` when a custom
+        // signal is aborted without a reason.
+        const matchesReason = signal?.reason !== undefined && error === signal.reason;
+        if (signal?.aborted && (matchesReason || isAbortError(error))) {
+          return abortedResult();
+        }
+
+        // No handler: preserve the default of rejecting the whole loop.
+        if (!onError) {
+          throw error;
+        }
+
+        const action = await onError(error, {
+          context: currentContext,
+          iteration: iterations,
+          attempt,
+        });
+
+        if (action === 'retry') {
+          // Don't spin on a retry once the signal has aborted.
+          if (signal?.aborted) {
+            return abortedResult();
+          }
+          continue;
+        }
+        if (action === 'stop') {
+          return {
+            finalContext: currentContext,
+            lastResponse,
+            reason: 'error',
+            iterations,
+          };
+        }
+        // 'throw' (the default action): re-raise the original error.
+        throw error;
       }
-      throw error;
     }
     lastResponse = response;
 
