@@ -138,6 +138,20 @@ export interface AgentLoopResult<
 }
 
 /**
+ * Whether an error is an abort-related rejection (e.g. from an aborted `fetch`).
+ * Standard `AbortSignal`-aware APIs reject with an error whose `name` is
+ * `'AbortError'` (a `DOMException` in the DOM/fetch case).
+ */
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error as { name?: unknown }).name === 'AbortError'
+  );
+}
+
+/**
  * Runs an agent loop.
  *
  * @param options Configuration options for the loop.
@@ -187,10 +201,11 @@ export async function agentLoop<TResponse, TContext>(
       response = await llmCaller(currentContext);
     } catch (error) {
       // If the caller forwarded this signal into llmCaller/fetch, aborting an
-      // in-flight request rejects the call. Normalize that common cancellation
-      // path into a clean 'aborted' result instead of throwing; any other error
-      // still propagates.
-      if (signal?.aborted) {
+      // in-flight request rejects with an AbortError. Normalize only that
+      // cancellation path into a clean 'aborted' result. Other failures
+      // (network/provider/application errors) still propagate, even if they
+      // happen to race with an abort.
+      if (signal?.aborted && isAbortError(error)) {
         return abortedResult();
       }
       throw error;

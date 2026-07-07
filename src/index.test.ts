@@ -271,6 +271,20 @@ describe('agentLoop', () => {
     ).rejects.toThrow('network down');
   });
 
+  it('should rethrow a non-abort error even when the signal is aborted', async () => {
+    const controller = new AbortController();
+    // A real failure that races with an abort must not be masked as 'aborted'.
+    const llmCaller = vi.fn(async () => {
+      controller.abort();
+      throw new Error('provider 500');
+    });
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    await expect(
+      agentLoop({ llmCaller, stopCondition, signal: controller.signal, initialContext: {} })
+    ).rejects.toThrow('provider 500');
+  });
+
   it('should complete normally when a signal is provided but never aborted', async () => {
     const controller = new AbortController();
     const llmCaller = vi.fn()
