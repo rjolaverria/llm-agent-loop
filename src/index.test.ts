@@ -148,4 +148,68 @@ describe('agentLoop', () => {
 
     expect(order).toEqual(['call', 'step']);
   });
+
+  it('should not run at all when the signal is already aborted', async () => {
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: { count: 0 },
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(0);
+    expect(result.finalContext).toEqual({ count: 0 });
+    expect(result.lastResponse).toBeUndefined();
+    expect(llmCaller).not.toHaveBeenCalled();
+  });
+
+  it('should stop with reason "aborted" when the signal aborts mid-loop', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    // Abort during the second iteration's onStep; the loop should detect it at
+    // the top of the third iteration.
+    const onStep = vi.fn((step) => {
+      if (step.iteration === 2) {
+        controller.abort();
+      }
+    });
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      onStep,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(2);
+    expect(llmCaller).toHaveBeenCalledTimes(2);
+  });
+
+  it('should complete normally when a signal is provided but never aborted', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('response1')
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    expect(result.reason).toBe('stop_condition');
+    expect(result.iterations).toBe(2);
+  });
 });

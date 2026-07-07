@@ -69,6 +69,16 @@ export interface AgentLoopOptions<TResponse, TContext> {
   onStep?: (step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>;
 
   /**
+   * Optional `AbortSignal` used to cancel the loop.
+   * The signal is checked at the start of each iteration; if it is already
+   * aborted the loop stops and resolves with `reason: 'aborted'` (it does not
+   * throw). An in-flight `llmCaller` is not interrupted — forward this signal
+   * into your `llmCaller` (e.g. to `fetch`) if you also need to abort the call
+   * itself.
+   */
+  signal?: AbortSignal;
+
+  /**
    * Initial context to start the loop with.
    */
   initialContext: TContext;
@@ -100,8 +110,11 @@ export interface AgentLoopResult<TResponse, TContext> {
 
   /**
    * The reason why the loop stopped.
+   * - `'stop_condition'`: the stop condition returned `true`.
+   * - `'max_loops'`: the maximum number of iterations was reached.
+   * - `'aborted'`: the provided `AbortSignal` was aborted.
    */
-  reason: 'stop_condition' | 'max_loops';
+  reason: 'stop_condition' | 'max_loops' | 'aborted';
 
   /**
    * The number of iterations performed.
@@ -118,13 +131,23 @@ export interface AgentLoopResult<TResponse, TContext> {
 export async function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext>
 ): Promise<AgentLoopResult<TResponse, TContext>> {
-  const { llmCaller, stopCondition, maxLoops = 10, updateContext, onStep, initialContext } = options;
+  const { llmCaller, stopCondition, maxLoops = 10, updateContext, onStep, signal, initialContext } =
+    options;
 
   let currentContext = initialContext;
   let lastResponse: TResponse | undefined;
   let iterations = 0;
 
   while (iterations < maxLoops) {
+    if (signal?.aborted) {
+      return {
+        finalContext: currentContext,
+        lastResponse,
+        reason: 'aborted',
+        iterations,
+      };
+    }
+
     iterations++;
 
     const response = await llmCaller(currentContext);

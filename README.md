@@ -74,6 +74,7 @@ Runs the agent loop.
 - `maxLoops`: `number` (default: 10) - Maximum number of iterations.
 - `updateContext`: `(response: TResponse, context: TContext) => TContext | Promise<TContext>` - Optional function to update context.
 - `onStep`: `(step: AgentLoopStep<TResponse, TContext>) => void | Promise<void>` - Optional per-iteration callback for observability (logging, tracing, progress, token accounting). Called after each LLM response and stop-condition check, before `updateContext` runs. If it returns a promise, the loop awaits it.
+- `signal`: `AbortSignal` - Optional signal to cancel the loop. Checked at the start of each iteration; if aborted, the loop resolves with `reason: 'aborted'` (it does not throw). An in-flight `llmCaller` is not interrupted — forward the signal into your `llmCaller` (e.g. to `fetch`) to abort the call itself.
 - `initialContext`: `TContext` - Initial state.
 
 Each `onStep` receives an `AgentLoopStep`:
@@ -96,8 +97,28 @@ const result = await agentLoop<string, MyContext>({
 
 - `finalContext`: `TContext` - The context after the loop finishes. See the note below about the final response.
 - `lastResponse`: `TResponse | undefined` - The last response from the LLM.
-- `reason`: `'stop_condition' | 'max_loops'` - Why the loop stopped.
+- `reason`: `'stop_condition' | 'max_loops' | 'aborted'` - Why the loop stopped.
 - `iterations`: `number` - Number of iterations performed.
+
+#### Cancellation with `AbortSignal`
+
+```typescript
+const controller = new AbortController();
+
+// Cancel from a UI "Stop" button or a timeout.
+setTimeout(() => controller.abort(), 5000);
+
+const result = await agentLoop<string, MyContext>({
+  // ...
+  signal: controller.signal,
+});
+
+if (result.reason === 'aborted') {
+  console.log('Loop was cancelled.');
+}
+```
+
+The signal is checked at the start of each iteration, so an already-running `llmCaller` still finishes. To cancel the in-flight request too, forward `signal` into your provider call (most SDKs and `fetch` accept one).
 
 #### Note: the final response is not folded into `finalContext` on stop
 
