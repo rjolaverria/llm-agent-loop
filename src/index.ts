@@ -86,9 +86,26 @@ export interface AgentLoopOptions<TResponse, TContext> {
 }
 
 /**
- * Result of the agent loop.
+ * The reason the loop stopped.
+ * - `'stop_condition'`: the stop condition returned `true`.
+ * - `'max_loops'`: the maximum number of iterations was reached.
+ * - `'aborted'`: the provided `AbortSignal` was aborted. Only possible when a
+ *   `signal` is passed.
  */
-export interface AgentLoopResult<TResponse, TContext> {
+export type AgentLoopReason = 'stop_condition' | 'max_loops' | 'aborted';
+
+/**
+ * Result of the agent loop.
+ *
+ * `TReason` narrows the possible `reason` values. Calls without a `signal`
+ * resolve with `'stop_condition' | 'max_loops'`; calls with a `signal` may also
+ * resolve with `'aborted'`. See the `agentLoop` overloads.
+ */
+export interface AgentLoopResult<
+  TResponse,
+  TContext,
+  TReason extends AgentLoopReason = AgentLoopReason,
+> {
   /**
    * The final context after the loop finished.
    *
@@ -111,11 +128,8 @@ export interface AgentLoopResult<TResponse, TContext> {
 
   /**
    * The reason why the loop stopped.
-   * - `'stop_condition'`: the stop condition returned `true`.
-   * - `'max_loops'`: the maximum number of iterations was reached.
-   * - `'aborted'`: the provided `AbortSignal` was aborted.
    */
-  reason: 'stop_condition' | 'max_loops' | 'aborted';
+  reason: TReason;
 
   /**
    * The number of iterations performed.
@@ -129,6 +143,15 @@ export interface AgentLoopResult<TResponse, TContext> {
  * @param options Configuration options for the loop.
  * @returns A promise that resolves to the result of the loop.
  */
+// Without a `signal`, the loop can never resolve with `'aborted'`, so callers
+// keep the original narrow reason union and existing exhaustive handling still
+// compiles. Passing a `signal` widens the reason union to include `'aborted'`.
+export function agentLoop<TResponse, TContext>(
+  options: AgentLoopOptions<TResponse, TContext> & { signal?: undefined }
+): Promise<AgentLoopResult<TResponse, TContext, 'stop_condition' | 'max_loops'>>;
+export function agentLoop<TResponse, TContext>(
+  options: AgentLoopOptions<TResponse, TContext>
+): Promise<AgentLoopResult<TResponse, TContext, AgentLoopReason>>;
 export async function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext>
 ): Promise<AgentLoopResult<TResponse, TContext>> {
@@ -139,19 +162,39 @@ export async function agentLoop<TResponse, TContext>(
   let lastResponse: TResponse | undefined;
   let iterations = 0;
 
+  const abortedResult = (): AgentLoopResult<TResponse, TContext> => ({
+    finalContext: currentContext,
+    lastResponse,
+    reason: 'aborted',
+    iterations,
+  });
+
+  // Handle an already-aborted signal even when the loop body never runs
+  // (e.g. maxLoops <= 0).
+  if (signal?.aborted) {
+    return abortedResult();
+  }
+
   while (iterations < maxLoops) {
     if (signal?.aborted) {
-      return {
-        finalContext: currentContext,
-        lastResponse,
-        reason: 'aborted',
-        iterations,
-      };
+      return abortedResult();
     }
 
     iterations++;
 
-    const response = await llmCaller(currentContext);
+    let response: TResponse;
+    try {
+      response = await llmCaller(currentContext);
+    } catch (error) {
+      // If the caller forwarded this signal into llmCaller/fetch, aborting an
+      // in-flight request rejects the call. Normalize that common cancellation
+      // path into a clean 'aborted' result instead of throwing; any other error
+      // still propagates.
+      if (signal?.aborted) {
+        return abortedResult();
+      }
+      throw error;
+    }
     lastResponse = response;
 
     const shouldStop = await stopCondition(response, currentContext);
