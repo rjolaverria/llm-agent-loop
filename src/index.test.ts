@@ -195,6 +195,32 @@ describe('agentLoop', () => {
     expect(llmCaller).toHaveBeenCalledTimes(2);
   });
 
+  it('should reflect signal abort in onStep willStop within the same iteration', async () => {
+    const controller = new AbortController();
+    // Abort during stopCondition of the first iteration, before onStep runs.
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn(() => {
+      controller.abort();
+      return false;
+    });
+    const onStep = vi.fn();
+
+    const result = await agentLoop({
+      llmCaller,
+      stopCondition,
+      onStep,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    // willStop should be true even though the stop condition returned false,
+    // because the signal is now aborted and the loop will stop next iteration.
+    expect(onStep.mock.calls[0][0].willStop).toBe(true);
+    expect(result.reason).toBe('aborted');
+    expect(result.iterations).toBe(1);
+  });
+
   it('should complete normally when a signal is provided but never aborted', async () => {
     const controller = new AbortController();
     const llmCaller = vi.fn()

@@ -23,8 +23,9 @@ export interface AgentLoopStep<TResponse, TContext> {
   context: TContext;
 
   /**
-   * Whether the loop will stop after this iteration — either because the
-   * stop condition was met or because `maxLoops` has been reached.
+   * Whether the loop will stop after this iteration — because the stop
+   * condition was met, `maxLoops` has been reached, or the `AbortSignal`
+   * has been aborted.
    */
   willStop: boolean;
 }
@@ -160,7 +161,7 @@ export async function agentLoop<TResponse, TContext>(
         iteration: iterations,
         response,
         context: currentContext,
-        willStop: shouldStop || iterations >= maxLoops,
+        willStop: shouldStop || iterations >= maxLoops || Boolean(signal?.aborted),
       });
     }
 
