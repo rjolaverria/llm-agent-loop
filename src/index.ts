@@ -332,11 +332,16 @@ export async function agentLoop<TResponse, TContext>(
  * const result = next.value; // AgentLoopResult
  * ```
  *
- * A step is yielded once per iteration (after `onStep`, before `updateContext`);
- * the final step that stops the loop is yielded before the result is returned.
- * `reason` includes `'aborted'`/`'error'` when a `signal`/`onError` is used;
- * unlike {@link agentLoop} there is no narrowing overload, so consumers switch
- * on the full union.
+ * A step is yielded once per iteration that produces a response (after
+ * `onStep`, before `updateContext`). For a `'stop_condition'` or `'max_loops'`
+ * outcome the terminal step is yielded before the result is returned. An
+ * `'aborted'` or `'error'` outcome may return **without** yielding a step for
+ * the terminating iteration — an already-aborted signal (or an abort between
+ * iterations) yields nothing, and an `onError` that returns `'stop'` produced
+ * no response that iteration — so don't rely on a final yielded step in those
+ * cases. `reason` includes `'aborted'`/`'error'` when a `signal`/`onError` is
+ * used; unlike {@link agentLoop} there is no narrowing overload, so consumers
+ * switch on the full union.
  *
  * @param options Configuration options for the loop (identical to `agentLoop`).
  */
