@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { agentLoop } from './index.js';
+import { agentLoop, agentLoopStream } from './index.js';
 
 describe('agentLoop', () => {
   it('should run until stop condition is met', async () => {
@@ -823,5 +823,185 @@ describe('agentLoop', () => {
 
     expect(result.reason).toBe('aborted');
     expect(result.history).toEqual(['response', 'response']);
+  });
+});
+
+describe('agentLoopStream', () => {
+  it('should yield one step per iteration with structured data', async () => {
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('response1')
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+    const updateContext = vi.fn((_, ctx: { count: number }) => ({ count: ctx.count + 1 }));
+
+    const steps = [];
+    for await (const step of agentLoopStream({
+      llmCaller,
+      stopCondition,
+      updateContext,
+      initialContext: { count: 0 },
+    })) {
+      steps.push(step);
+    }
+
+    expect(steps).toEqual([
+      { iteration: 1, response: 'response1', context: { count: 0 }, willStop: false },
+      { iteration: 2, response: 'stop', context: { count: 1 }, willStop: true },
+    ]);
+  });
+
+  it('should return the final AgentLoopResult after the last step', async () => {
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('a')
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+
+    const stream = agentLoopStream({
+      llmCaller,
+      stopCondition,
+      collectHistory: true,
+      initialContext: {},
+    });
+
+    const yielded = [];
+    let next = await stream.next();
+    while (!next.done) {
+      yielded.push(next.value);
+      next = await stream.next();
+    }
+
+    // The last step is yielded before the generator returns the result.
+    expect(yielded.map((s) => s.response)).toEqual(['a', 'stop']);
+    expect(next.value).toMatchObject({
+      reason: 'stop_condition',
+      iterations: 2,
+      lastResponse: 'stop',
+      history: ['a', 'stop'],
+    });
+    expect(typeof next.value.durationMs).toBe('number');
+  });
+
+  it('should still invoke onStep for each yielded step', async () => {
+    const llmCaller = vi.fn()
+      .mockResolvedValueOnce('r1')
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+    const onStep = vi.fn();
+
+    const streamed = [];
+    for await (const step of agentLoopStream({
+      llmCaller,
+      stopCondition,
+      onStep,
+      initialContext: {},
+    })) {
+      streamed.push(step.response);
+    }
+
+    expect(streamed).toEqual(['r1', 'stop']);
+    expect(onStep).toHaveBeenCalledTimes(2);
+    // onStep runs before the step is yielded, on the same object.
+    expect(onStep.mock.calls[0][0]).toMatchObject({ iteration: 1, response: 'r1' });
+  });
+
+  it('should stop streaming and return "aborted" when the signal aborts', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    const stream = agentLoopStream({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    const responses = [];
+    let next = await stream.next();
+    while (!next.done) {
+      responses.push(next.value.response);
+      if (next.value.iteration === 2) {
+        controller.abort();
+      }
+      next = await stream.next();
+    }
+
+    expect(responses).toEqual(['response', 'response']);
+    expect(next.value.reason).toBe('aborted');
+    expect(next.value.iterations).toBe(2);
+  });
+
+  it('should route llmCaller failures through onError while streaming', async () => {
+    const llmCaller = vi.fn()
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValueOnce('stop');
+    const stopCondition = vi.fn((response) => response === 'stop');
+    const onError = vi.fn().mockReturnValue('retry');
+
+    const steps = [];
+    for await (const step of agentLoopStream({
+      llmCaller,
+      stopCondition,
+      onError,
+      initialContext: {},
+    })) {
+      steps.push(step.response);
+    }
+
+    // The retry happens within iteration 1, so only the successful response is
+    // yielded as a step.
+    expect(steps).toEqual(['stop']);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(llmCaller).toHaveBeenCalledTimes(2);
+  });
+
+  it('should refresh willStop on the yielded step when onStep aborts the signal', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    // onStep aborts on the first step — after willStop was computed as false.
+    const onStep = vi.fn((step) => {
+      if (step.iteration === 1) {
+        controller.abort();
+      }
+    });
+
+    const stream = agentLoopStream({
+      llmCaller,
+      stopCondition,
+      onStep,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    const first = await stream.next();
+    // The yielded step reflects the late abort even though onStep saw it as
+    // false when it ran.
+    expect(first.value).toMatchObject({ iteration: 1, willStop: true });
+
+    const second = await stream.next();
+    expect(second.done).toBe(true);
+    expect(second.value.reason).toBe('aborted');
+  });
+
+  it('should not yield any step when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+
+    const stream = agentLoopStream({
+      llmCaller,
+      stopCondition,
+      signal: controller.signal,
+      initialContext: {},
+    });
+
+    const first = await stream.next();
+    expect(first.done).toBe(true);
+    expect(first.value).toMatchObject({ reason: 'aborted', iterations: 0 });
+    expect(llmCaller).not.toHaveBeenCalled();
   });
 });

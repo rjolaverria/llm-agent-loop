@@ -293,6 +293,66 @@ export function agentLoop<TResponse, TContext>(
 export async function agentLoop<TResponse, TContext>(
   options: AgentLoopOptions<TResponse, TContext>
 ): Promise<AgentLoopResult<TResponse, TContext, AgentLoopReason>> {
+  // Drive the streaming implementation to completion, discarding the per-step
+  // yields and returning the generator's final value. Keeping a single core
+  // (`agentLoopStream`) means the callback and streaming entry points can never
+  // drift in their loop/abort/error semantics.
+  const iterator = agentLoopStream(options);
+  let next = await iterator.next();
+  while (!next.done) {
+    next = await iterator.next();
+  }
+  return next.value;
+}
+
+/**
+ * Runs an agent loop as an async iterator, yielding each {@link AgentLoopStep}
+ * as it happens and returning the final {@link AgentLoopResult}.
+ *
+ * This is the streaming counterpart to {@link agentLoop} (which is implemented
+ * by draining this generator), useful for rendering progress as each iteration
+ * completes:
+ *
+ * ```ts
+ * for await (const step of agentLoopStream(options)) {
+ *   render(step); // { iteration, response, context, willStop }
+ * }
+ * ```
+ *
+ * `for await` consumes the yielded steps but discards the generator's return
+ * value. To also capture the final result, iterate manually:
+ *
+ * ```ts
+ * const stream = agentLoopStream(options);
+ * let next = await stream.next();
+ * while (!next.done) {
+ *   render(next.value); // a step
+ *   next = await stream.next();
+ * }
+ * const result = next.value; // AgentLoopResult
+ * ```
+ *
+ * A step is yielded once per iteration that produces a response (after
+ * `onStep`, before `updateContext`). For a `'stop_condition'` stop — or a
+ * `'max_loops'` stop that ran at least one iteration — the terminal step is
+ * yielded before the result is returned. Other outcomes may return **without**
+ * yielding a step for the terminating iteration: an already-aborted signal (or
+ * an abort between iterations) yields nothing, an `onError` that returns
+ * `'stop'` produced no response that iteration, and `maxLoops <= 0` returns
+ * `'max_loops'` without running at all — so don't rely on a final yielded step
+ * in those cases. `reason` includes `'aborted'`/`'error'` when a `signal`/`onError` is
+ * used; unlike {@link agentLoop} there is no narrowing overload, so consumers
+ * switch on the full union.
+ *
+ * @param options Configuration options for the loop (identical to `agentLoop`).
+ */
+export async function* agentLoopStream<TResponse, TContext>(
+  options: AgentLoopOptions<TResponse, TContext>
+): AsyncGenerator<
+  AgentLoopStep<TResponse, TContext>,
+  AgentLoopResult<TResponse, TContext, AgentLoopReason>,
+  void
+> {
   const {
     llmCaller,
     stopCondition,
@@ -439,14 +499,27 @@ export async function agentLoop<TResponse, TContext>(
 
     const shouldStop = stopCondition ? await stopCondition(response, currentContext) : false;
 
+    const step: AgentLoopStep<TResponse, TContext> = {
+      iteration: iterations,
+      response,
+      context: currentContext,
+      willStop: shouldStop || iterations >= maxLoops || Boolean(signal?.aborted),
+    };
+
     if (onStep) {
-      await onStep({
-        iteration: iterations,
-        response,
-        context: currentContext,
-        willStop: shouldStop || iterations >= maxLoops || Boolean(signal?.aborted),
-      });
+      await onStep(step);
     }
+
+    // `onStep` (or an external task) may abort the signal after `willStop` was
+    // first computed. The step is streamed after `onStep`, so reflect a late
+    // abort before yielding; `willStop` only ever flips false -> true here.
+    if (!step.willStop && signal?.aborted) {
+      step.willStop = true;
+    }
+
+    // Surface the step to streaming consumers. `agentLoop` drives this to
+    // completion and ignores the yielded value.
+    yield step;
 
     if (shouldStop) {
       return settle('stop_condition');
