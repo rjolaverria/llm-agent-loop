@@ -6,6 +6,7 @@ A lightweight, provider-agnostic agent loop for building LLM agents in TypeScrip
 
 - **Generic**: Works with any LLM provider (OpenAI, Anthropic, Gemini, etc.).
 - **Flexible**: Custom stop conditions, context updates, and max loop limits.
+- **Observable**: Per-step `onStep` callback or a streaming `agentLoopStream` async iterator.
 - **Type-Safe**: Written in TypeScript with generic types for response and context.
 - **Zero Dependencies**: Pure logic, no bloat.
 
@@ -161,6 +162,34 @@ if (result.reason === 'aborted') {
 ```
 
 The signal is checked at the start of each iteration, so an already-running `llmCaller` still finishes. To cancel the in-flight request too, forward `signal` into your provider call (most SDKs and `fetch` accept one).
+
+### `agentLoopStream(options)`
+
+The streaming counterpart to `agentLoop`. It takes the **same options** and is an async generator that `yield`s each [`AgentLoopStep`](#options) as it happens — ideal for rendering progress as each iteration completes. `agentLoop` is itself implemented by draining this generator, so the two share identical loop, abort, and error semantics.
+
+```typescript
+import { agentLoopStream } from 'llm-agent-loop';
+
+for await (const step of agentLoopStream<string, MyContext>({ /* ...same options... */ })) {
+  console.log(`[step ${step.iteration}] ${step.response}${step.willStop ? ' (last)' : ''}`);
+}
+```
+
+A step is yielded once per iteration (after `onStep`, before `updateContext`), including the final step that stops the loop. `for await` consumes the steps but discards the generator's **return value** (the `AgentLoopResult`). To capture the final result too, iterate manually:
+
+```typescript
+const stream = agentLoopStream<string, MyContext>({ /* ... */ });
+
+let next = await stream.next();
+while (!next.done) {
+  render(next.value); // a step
+  next = await stream.next();
+}
+
+const result = next.value; // AgentLoopResult — reason, finalContext, durationMs, ...
+```
+
+Unlike `agentLoop`, there is no reason-narrowing overload — `result.reason` is the full `'stop_condition' | 'max_loops' | 'aborted' | 'error'` union.
 
 #### Note: the final response is not folded into `finalContext` on stop
 
