@@ -88,7 +88,7 @@ async function main() {
 
       // 2. Execute every tool the model asked for and return the results.
       const toolUses = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
       );
       if (toolUses.length > 0) {
         const toolResults: Anthropic.ToolResultBlockParam[] = toolUses.map((block) => ({
@@ -109,7 +109,7 @@ async function main() {
   // the last assistant answer is NOT in `finalContext.messages` — it lives on
   // `lastResponse`, which is why we read the answer from there below.
   const finalText = result.lastResponse?.content.find(
-    (b): b is Anthropic.TextBlock => b.type === 'text'
+    (b): b is Anthropic.TextBlock => b.type === 'text',
   );
 
   console.log(`Stopped because: ${result.reason} (after ${result.iterations} iterations)`);

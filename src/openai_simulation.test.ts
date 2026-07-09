@@ -25,7 +25,7 @@ describe('OpenAI Simulation', () => {
     // We'll mock the model's responses.
     // The loop will call the LLM with the current history.
     // We'll update the history with the model's response.
-    
+
     mockCreate
       .mockResolvedValueOnce({
         choices: [{ message: { role: 'assistant', content: 'Hi there! How can I help?' } }],
@@ -85,7 +85,7 @@ describe('OpenAI Simulation', () => {
     // 4. Model: "It is sunny in SF" -> Stop
 
     mockCreate.mockReset();
-    
+
     // Response 1: Tool Call
     const toolCallMsg = {
       role: 'assistant',
@@ -98,7 +98,7 @@ describe('OpenAI Simulation', () => {
         },
       ],
     };
-    
+
     // Response 2: Final Answer
     const finalMsg = {
       role: 'assistant',
@@ -148,7 +148,7 @@ describe('OpenAI Simulation', () => {
             }
           }
         }
-        
+
         return { messages: newMessages };
       },
       maxLoops: 5,
@@ -157,7 +157,7 @@ describe('OpenAI Simulation', () => {
     expect(result.reason).toBe('stop_condition');
     expect(result.iterations).toBe(2); // 1. Tool Call, 2. Final Answer
     expect(result.lastResponse.choices[0].message.content).toBe('It is sunny in SF');
-    expect(result.finalContext.messages).toHaveLength(3); 
+    expect(result.finalContext.messages).toHaveLength(3);
     // 1. User
     // 2. Assistant (Tool Call)
     // 3. Tool Result
@@ -169,7 +169,7 @@ describe('OpenAI Simulation', () => {
     //   update()
     // So if stop returns true, update is NOT called for that response.
     // Thus, the final answer is NOT in finalContext.messages.
-    
+
     // Let's verify context content:
     // [User, Assistant(ToolCall), Tool(Result)]
     expect(result.finalContext.messages).toHaveLength(3);
