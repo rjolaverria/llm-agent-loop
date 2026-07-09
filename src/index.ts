@@ -333,13 +333,14 @@ export async function agentLoop<TResponse, TContext>(
  * ```
  *
  * A step is yielded once per iteration that produces a response (after
- * `onStep`, before `updateContext`). For a `'stop_condition'` or `'max_loops'`
- * outcome the terminal step is yielded before the result is returned. An
- * `'aborted'` or `'error'` outcome may return **without** yielding a step for
- * the terminating iteration — an already-aborted signal (or an abort between
- * iterations) yields nothing, and an `onError` that returns `'stop'` produced
- * no response that iteration — so don't rely on a final yielded step in those
- * cases. `reason` includes `'aborted'`/`'error'` when a `signal`/`onError` is
+ * `onStep`, before `updateContext`). For a `'stop_condition'` stop — or a
+ * `'max_loops'` stop that ran at least one iteration — the terminal step is
+ * yielded before the result is returned. Other outcomes may return **without**
+ * yielding a step for the terminating iteration: an already-aborted signal (or
+ * an abort between iterations) yields nothing, an `onError` that returns
+ * `'stop'` produced no response that iteration, and `maxLoops <= 0` returns
+ * `'max_loops'` without running at all — so don't rely on a final yielded step
+ * in those cases. `reason` includes `'aborted'`/`'error'` when a `signal`/`onError` is
  * used; unlike {@link agentLoop} there is no narrowing overload, so consumers
  * switch on the full union.
  *
@@ -507,6 +508,13 @@ export async function* agentLoopStream<TResponse, TContext>(
 
     if (onStep) {
       await onStep(step);
+    }
+
+    // `onStep` (or an external task) may abort the signal after `willStop` was
+    // first computed. The step is streamed after `onStep`, so reflect a late
+    // abort before yielding; `willStop` only ever flips false -> true here.
+    if (!step.willStop && signal?.aborted) {
+      step.willStop = true;
     }
 
     // Surface the step to streaming consumers. `agentLoop` drives this to

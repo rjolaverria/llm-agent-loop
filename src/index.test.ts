@@ -956,6 +956,36 @@ describe('agentLoopStream', () => {
     expect(llmCaller).toHaveBeenCalledTimes(2);
   });
 
+  it('should refresh willStop on the yielded step when onStep aborts the signal', async () => {
+    const controller = new AbortController();
+    const llmCaller = vi.fn().mockResolvedValue('response');
+    const stopCondition = vi.fn().mockReturnValue(false);
+    // onStep aborts on the first step — after willStop was computed as false.
+    const onStep = vi.fn((step) => {
+      if (step.iteration === 1) {
+        controller.abort();
+      }
+    });
+
+    const stream = agentLoopStream({
+      llmCaller,
+      stopCondition,
+      onStep,
+      signal: controller.signal,
+      maxLoops: 10,
+      initialContext: {},
+    });
+
+    const first = await stream.next();
+    // The yielded step reflects the late abort even though onStep saw it as
+    // false when it ran.
+    expect(first.value).toMatchObject({ iteration: 1, willStop: true });
+
+    const second = await stream.next();
+    expect(second.done).toBe(true);
+    expect(second.value.reason).toBe('aborted');
+  });
+
   it('should not yield any step when the signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();

@@ -175,7 +175,7 @@ for await (const step of agentLoopStream<string, MyContext>({ /* ...same options
 }
 ```
 
-A step is yielded once per iteration that produces a response (after `onStep`, before `updateContext`). For a `'stop_condition'` or `'max_loops'` stop the terminal step is yielded before the result is returned; an `'aborted'` or `'error'` outcome may return **without** a step for the terminating iteration (an already-aborted signal yields nothing, and an `onError` that returns `'stop'` produced no response that iteration). `for await` consumes the steps but discards the generator's **return value** (the `AgentLoopResult`). To capture the final result too, iterate manually:
+A step is yielded once per iteration that produces a response (after `onStep`, before `updateContext`). For a `'stop_condition'` stop — or a `'max_loops'` stop that ran at least one iteration — the terminal step is yielded before the result is returned. Other outcomes may return **without** a step for the terminating iteration: an already-aborted signal yields nothing, an `onError` that returns `'stop'` produced no response that iteration, and `maxLoops <= 0` returns `'max_loops'` without running at all. `for await` consumes the steps but discards the generator's **return value** (the `AgentLoopResult`). To capture the final result too, iterate manually:
 
 ```typescript
 const stream = agentLoopStream<string, MyContext>({ /* ... */ });
