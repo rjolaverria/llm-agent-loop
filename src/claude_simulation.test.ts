@@ -46,7 +46,7 @@ describe('Claude Simulation', () => {
         });
       },
       stopCondition: (response) => {
-        const textBlock = response.content.find(b => b.type === 'text') as Anthropic.TextBlock;
+        const textBlock = response.content.find((b) => b.type === 'text') as Anthropic.TextBlock;
         return textBlock?.text === 'Goodbye';
       },
       updateContext: (response, ctx) => {
@@ -121,7 +121,7 @@ describe('Claude Simulation', () => {
       },
       updateContext: async (response, ctx) => {
         const newMessages = [...ctx.messages];
-        
+
         // 1. Add assistant's tool use message
         newMessages.push({
           role: 'assistant',
@@ -129,11 +129,13 @@ describe('Claude Simulation', () => {
         });
 
         // 2. Process tool uses
-        const toolUseBlocks = response.content.filter(b => b.type === 'tool_use') as Anthropic.ToolUseBlock[];
-        
+        const toolUseBlocks = response.content.filter(
+          (b) => b.type === 'tool_use',
+        ) as Anthropic.ToolUseBlock[];
+
         if (toolUseBlocks.length > 0) {
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
-          
+
           for (const block of toolUseBlocks) {
             if (block.name === 'get_weather') {
               // Simulate execution
@@ -163,14 +165,14 @@ describe('Claude Simulation', () => {
     expect(result.iterations).toBe(2);
     const lastBlock = result.lastResponse?.content[0] as Anthropic.TextBlock;
     expect(lastBlock.text).toBe('It is sunny.');
-    
+
     // Verify context
     // 1. User
     // 2. Assistant (Tool Use)
     // 3. User (Tool Result)
     // Final answer loop stops, so not in context.
     expect(result.finalContext.messages).toHaveLength(3);
-    
+
     const lastMsg = result.finalContext.messages[2];
     expect(lastMsg.role).toBe('user');
     const lastContent = lastMsg.content as Anthropic.ToolResultBlockParam[];

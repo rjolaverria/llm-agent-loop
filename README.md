@@ -29,22 +29,22 @@ interface MyContext {
 // Run the loop
 const result = await agentLoop<string, MyContext>({
   initialContext: { messages: [] },
-  
+
   // Function to call your LLM
   llmCaller: async (ctx) => {
     // Call OpenAI, Anthropic, etc.
-    return "Response from LLM"; 
+    return 'Response from LLM';
   },
 
   // Condition to stop the loop
   stopCondition: (response, context) => {
-    return response.includes("DONE");
+    return response.includes('DONE');
   },
 
   // Optional: Update context based on response
   updateContext: (response, ctx) => {
     return {
-      messages: [...ctx.messages, { role: 'assistant', content: response }]
+      messages: [...ctx.messages, { role: 'assistant', content: response }],
     };
   },
 
@@ -114,7 +114,7 @@ const result = await agentLoop<string, MyContext>({
   // ...
   onError: (error, { attempt }) => {
     if (attempt < 3) return 'retry'; // re-call llmCaller (same iteration)
-    return 'throw';                  // give up after 3 attempts
+    return 'throw'; // give up after 3 attempts
   },
 });
 ```
@@ -125,7 +125,7 @@ The handler returns one of:
 - `'stop'` — stop the loop gracefully; the result's `reason` is `'error'`.
 - `'throw'` — re-throw the original error (the default when no `onError` is given).
 
-`info` is `{ context, iteration, attempt }`. Only `llmCaller` failures are routed to `onError` — errors thrown by `stopCondition`, `updateContext`, or `onStep` are treated as programming errors and always propagate. An aborted `signal` takes precedence: an abort-caused rejection resolves `'aborted'` without calling `onError`, and if the signal aborts *while* `onError` is running the loop resolves `'aborted'` regardless of the returned action.
+`info` is `{ context, iteration, attempt }`. Only `llmCaller` failures are routed to `onError` — errors thrown by `stopCondition`, `updateContext`, or `onStep` are treated as programming errors and always propagate. An aborted `signal` takes precedence: an abort-caused rejection resolves `'aborted'` without calling `onError`, and if the signal aborts _while_ `onError` is running the loop resolves `'aborted'` regardless of the returned action.
 
 > A handler that ignores its arguments and returns a bare constant (e.g. `() => 'stop'`) needs `as const` or a return annotation (`(): AgentLoopErrorAction => 'stop'`) so TypeScript infers the literal. Handlers that inspect `error`/`info` don't need this.
 
@@ -136,7 +136,7 @@ The handler returns one of:
 ```typescript
 const result = await agentLoop<string, MyContext>({
   initialContext: { messages: [] },
-  llmCaller: async (ctx) => "Response from LLM",
+  llmCaller: async (ctx) => 'Response from LLM',
   maxLoops: 3, // run exactly 3 iterations
 });
 
@@ -170,7 +170,7 @@ The streaming counterpart to `agentLoop`. It takes the **same options** and is a
 ```typescript
 import { agentLoopStream } from 'llm-agent-loop';
 
-for await (const step of agentLoopStream<string, MyContext>({ /* ...same options... */ })) {
+for await (const step of agentLoopStream<string, MyContext>({/* ...same options... */})) {
   console.log(`[step ${step.iteration}] ${step.response}${step.willStop ? ' (last)' : ''}`);
 }
 ```
@@ -178,7 +178,7 @@ for await (const step of agentLoopStream<string, MyContext>({ /* ...same options
 A step is yielded once per iteration that produces a response (after `onStep`, before `updateContext`). For a `'stop_condition'` stop — or a `'max_loops'` stop that ran at least one iteration — the terminal step is yielded before the result is returned. Other outcomes may return **without** a step for the terminating iteration: an already-aborted signal yields nothing, an `onError` that returns `'stop'` produced no response that iteration, and `maxLoops <= 0` returns `'max_loops'` without running at all. `for await` consumes the steps but discards the generator's **return value** (the `AgentLoopResult`). To capture the final result too, iterate manually:
 
 ```typescript
-const stream = agentLoopStream<string, MyContext>({ /* ... */ });
+const stream = agentLoopStream<string, MyContext>({/* ... */});
 
 let next = await stream.next();
 while (!next.done) {
@@ -198,7 +198,7 @@ The loop runs in this order each iteration: call `llmCaller` → check `stopCond
 That final response is always available as `result.lastResponse`. If you use `finalContext` as your complete message history/transcript, append `lastResponse` yourself when `reason` is `'stop_condition'`:
 
 ```typescript
-const result = await agentLoop<string, MyContext>({ /* ... */ });
+const result = await agentLoop<string, MyContext>({/* ... */});
 
 // finalContext.messages does NOT include the response that stopped the loop.
 const fullMessages =
@@ -213,4 +213,4 @@ You can track the development progress and completed tasks in [TASKS.md](./TASKS
 
 ---
 
-*This project was created with [Google Antigravity](https://antigravity.google/).*
+_This project was created with [Google Antigravity](https://antigravity.google/)._

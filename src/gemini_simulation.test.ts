@@ -51,16 +51,16 @@ describe('Gemini Simulation', () => {
         const text = response.response.text();
         const newPart: Part = { text };
         const newContent: Content = { role: 'model', parts: [newPart] };
-        
+
         // In a real app, we'd add the next user message here too.
         // For this test, we just append the model response.
         // If we wanted to simulate the user saying "Stop", we'd need to inject it.
         // Let's assume the "User" input is implicit or we just want to test the model's sequence.
         // Actually, for the second call to produce "Bye", the model usually needs input.
-        // But since we are mocking the sequence, we don't strictly need to update the context with user input 
+        // But since we are mocking the sequence, we don't strictly need to update the context with user input
         // for the mock to work, unless the mock implementation depends on it.
         // Here mockGenerateContent just returns sequence.
-        
+
         return {
           history: [...ctx.history, newContent],
         };
@@ -90,7 +90,7 @@ describe('Gemini Simulation', () => {
         args: { location: 'NY' },
       },
     };
-    
+
     mockGenerateContent.mockResolvedValueOnce({
       response: {
         text: () => '',
@@ -130,15 +130,15 @@ describe('Gemini Simulation', () => {
         // 1. Add model's response (with function call)
         // 2. Execute function
         // 3. Add function response
-        
+
         // Note: In the real SDK, response.candidates[0].content is the content object.
         // We mocked it above.
-        
+
         // We need to access the raw content to append it correctly.
         // In our mock, we put it in candidates[0].content.
-        // Let's assume the caller can access it via response.response.candidates[0].content 
+        // Let's assume the caller can access it via response.response.candidates[0].content
         // or we just reconstruct it from functionCalls().
-        
+
         // For this test, let's rely on our mock structure.
         const modelContent = (response as any).response.candidates[0].content;
         const newHistory = [...ctx.history, modelContent];
@@ -154,7 +154,7 @@ describe('Gemini Simulation', () => {
                   response: { name: 'get_weather', content: { weather: 'Cloudy' } },
                 },
               };
-              
+
               newHistory.push({
                 role: 'function', // Gemini uses 'function' role for responses
                 parts: [functionResponsePart],
@@ -178,16 +178,16 @@ describe('Gemini Simulation', () => {
     // So updateContext is NOT called for the final answer.
     // Context should be: [User, Model(Call), Function(Resp)]
     // Length 3.
-    
+
     // Let's re-verify stopCondition logic.
-    // Iteration 1: Call -> returns FunctionCall. stopCondition checks if NO calls. 
+    // Iteration 1: Call -> returns FunctionCall. stopCondition checks if NO calls.
     // It HAS calls, so stop=false.
     // updateContext runs. Adds Model(Call) and Function(Resp). History len = 3.
-    
+
     // Iteration 2: Call -> returns "It is cloudy". stopCondition checks if NO calls.
     // It HAS NO calls, so stop=true.
     // Loop returns.
-    
+
     // So final context length is 3.
     expect(result.finalContext.history).toHaveLength(3);
     expect(result.finalContext.history[2].role).toBe('function');

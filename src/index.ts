@@ -148,7 +148,7 @@ export interface AgentLoopOptions<TResponse, TContext> {
    */
   onError?: (
     error: unknown,
-    info: AgentLoopErrorInfo<TContext>
+    info: AgentLoopErrorInfo<TContext>,
   ) => AgentLoopErrorAction | Promise<AgentLoopErrorAction>;
 
   /**
@@ -285,13 +285,13 @@ function isAbortError(error: unknown): boolean {
 // require multiplying overloads across each present/absent axis for little gain,
 // and widening a result type never breaks an exhaustive consumer.
 export function agentLoop<TResponse, TContext>(
-  options: AgentLoopOptions<TResponse, TContext> & { signal?: undefined; onError?: undefined }
+  options: AgentLoopOptions<TResponse, TContext> & { signal?: undefined; onError?: undefined },
 ): Promise<AgentLoopResult<TResponse, TContext, 'stop_condition' | 'max_loops'>>;
 export function agentLoop<TResponse, TContext>(
-  options: AgentLoopOptions<TResponse, TContext>
+  options: AgentLoopOptions<TResponse, TContext>,
 ): Promise<AgentLoopResult<TResponse, TContext, AgentLoopReason>>;
 export async function agentLoop<TResponse, TContext>(
-  options: AgentLoopOptions<TResponse, TContext>
+  options: AgentLoopOptions<TResponse, TContext>,
 ): Promise<AgentLoopResult<TResponse, TContext, AgentLoopReason>> {
   // Drive the streaming implementation to completion, discarding the per-step
   // yields and returning the generator's final value. Keeping a single core
@@ -347,7 +347,7 @@ export async function agentLoop<TResponse, TContext>(
  * @param options Configuration options for the loop (identical to `agentLoop`).
  */
 export async function* agentLoopStream<TResponse, TContext>(
-  options: AgentLoopOptions<TResponse, TContext>
+  options: AgentLoopOptions<TResponse, TContext>,
 ): AsyncGenerator<
   AgentLoopStep<TResponse, TContext>,
   AgentLoopResult<TResponse, TContext, AgentLoopReason>,
@@ -376,7 +376,7 @@ export async function* agentLoopStream<TResponse, TContext>(
   // Single exit point for the common result shape, so `durationMs` and
   // `history` are applied consistently at every return site.
   const settle = (
-    reason: AgentLoopReason
+    reason: AgentLoopReason,
   ): AgentLoopResult<TResponse, TContext, AgentLoopReason> => ({
     finalContext: currentContext,
     lastResponse,
@@ -488,7 +488,7 @@ export async function* agentLoopStream<TResponse, TContext>(
         // than silently behaving like 'throw', and keep the original failure
         // reachable as the TypeError's `cause`.
         const invalidActionError = new TypeError(
-          `onError must return 'retry', 'stop', or 'throw'; received ${String(action)}`
+          `onError must return 'retry', 'stop', or 'throw'; received ${String(action)}`,
         );
         (invalidActionError as Error & { cause?: unknown }).cause = error;
         throw invalidActionError;
