@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-13
+
 ### Added
 
 - `onStep` callback for per-iteration observability (logging, tracing, progress, token accounting). ([#12](https://github.com/rjolaverria/llm-agent-loop/pull/12))
@@ -20,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `stopCondition` is now optional; omit it to run until `maxLoops` (or an abort). ([#14](https://github.com/rjolaverria/llm-agent-loop/pull/14))
 - Migrated TypeScript to `NodeNext` module resolution and now ship declaration/source maps plus `src/index.ts` for go-to-definition into sources. ([#18](https://github.com/rjolaverria/llm-agent-loop/pull/18))
-- Raised the supported runtime to Node 22 (`engines.node: ">=22.13.0"`) alongside the ESLint/Prettier toolchain. ([#19](https://github.com/rjolaverria/llm-agent-loop/pull/19))
+- **BREAKING:** raised the supported runtime to Node 22 (`engines.node: ">=22.13.0"`), dropping Node 18/20 — this is what makes the release a major version. Ships alongside the ESLint/Prettier toolchain, a Husky pre-commit hook, and lint/format/typecheck gates in CI and the publish workflow. ([#19](https://github.com/rjolaverria/llm-agent-loop/pull/19), [#20](https://github.com/rjolaverria/llm-agent-loop/pull/20))
 
 ### Fixed
 
@@ -34,5 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial published baseline: the core `agentLoop(options)` primitive (`llmCaller`, `stopCondition`, `updateContext`, `maxLoops`) returning a typed `AgentLoopResult` (`finalContext`, `lastResponse`, `reason`, `iterations`).
 
-[unreleased]: https://github.com/rjolaverria/llm-agent-loop/compare/v1.0.2...HEAD
+[unreleased]: https://github.com/rjolaverria/llm-agent-loop/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/rjolaverria/llm-agent-loop/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/rjolaverria/llm-agent-loop/releases/tag/v1.0.2
