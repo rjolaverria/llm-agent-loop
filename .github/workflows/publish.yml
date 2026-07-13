@@ -19,6 +19,11 @@ jobs:
           node-version-file: '.nvmrc'
           registry-url: 'https://registry.npmjs.org'
 
+      # npm 11 is required for OIDC trusted publishing (>= 11.5.1) and is
+      # compatible with the pinned Node 22.13 (`>=22.9.0`). `npm@latest` is now
+      # npm 12, which requires Node >= 22.22.2 and would fail here.
+      - name: Pin npm to an OIDC-capable release
+        run: npm install -g npm@11
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
