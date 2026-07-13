@@ -1,5 +1,10 @@
 # llm-agent-loop
 
+[![npm version](https://img.shields.io/npm/v/llm-agent-loop.svg)](https://www.npmjs.com/package/llm-agent-loop)
+[![CI](https://github.com/rjolaverria/llm-agent-loop/actions/workflows/test.yml/badge.svg)](https://github.com/rjolaverria/llm-agent-loop/actions/workflows/test.yml)
+[![license](https://img.shields.io/npm/l/llm-agent-loop.svg)](https://github.com/rjolaverria/llm-agent-loop/blob/main/LICENSE)
+[![node](https://img.shields.io/node/v/llm-agent-loop.svg)](https://nodejs.org)
+
 A lightweight, provider-agnostic agent loop for building LLM agents in TypeScript.
 
 ## Features
