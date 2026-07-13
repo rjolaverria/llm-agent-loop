@@ -15,5 +15,5 @@
 
 ## Checklist
 
-- [ ] This change was built with an AI coding assistant, per [CONTRIBUTING.md](../CONTRIBUTING.md)
+- [ ] This change was built with an AI coding assistant, per [CONTRIBUTING.md](https://github.com/rjolaverria/llm-agent-loop/blob/main/CONTRIBUTING.md)
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` (for user-facing changes)
