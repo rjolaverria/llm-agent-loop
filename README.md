@@ -212,10 +212,4 @@ const fullMessages =
     : result.finalContext.messages;
 ```
 
-## Development Tasks
-
-You can track the development progress and completed tasks in [TASKS.md](./TASKS.md). These tasks are executed by the **Antigravity Agent**.
-
----
-
 _This project was created with [Google Antigravity](https://antigravity.google/)._
